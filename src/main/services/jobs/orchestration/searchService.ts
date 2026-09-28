@@ -112,7 +112,7 @@ export class SearchService {
         detail = health.lastError ?? 'Last request failed'
       } else if (health.lastSuccessAt) {
         status = 'CONNECTED'
-        detail = `Last successful fetch ${new Date(health.lastSuccessAt).toLocaleString()}`
+        detail = 'Responding normally.'
       } else {
         status = 'AVAILABLE'
         detail =

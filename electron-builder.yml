@@ -1,4 +1,4 @@
-appId: com.electron.app
+appId: com.pulseapply.app
 productName: pulseapply
 directories:
   buildResources: build
@@ -9,8 +9,15 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{tests/**,scripts/**,vitest.config.ts,.vitest-*}'
+# Files read or executed outside Node's asar support (WASM, browser driver,
+# PDF worker, gazetteer data) are kept outside the archive.
 asarUnpack:
   - resources/**
+  - node_modules/playwright/**
+  - node_modules/playwright-core/**
+  - node_modules/pdf-parse/**
+  - node_modules/sql.js/**
 win:
   executableName: pulseapply
 nsis:
@@ -33,7 +40,7 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: pulseapply
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}

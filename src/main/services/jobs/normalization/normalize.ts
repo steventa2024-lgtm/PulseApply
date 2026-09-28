@@ -158,7 +158,14 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
 
   // ---- work mode ---------------------------------------------------------
   const workModes: WorkMode[] = draft.workModes?.length ? [...new Set(draft.workModes)] : []
-  const locBlob = [draft.locationText, ...(draft.extraLocations ?? [])].join(' | ')
+  const locBlob = [
+    ...new Map(
+      [draft.locationText, ...(draft.extraLocations ?? [])]
+        .map((l) => l?.trim())
+        .filter((l): l is string => !!l)
+        .map((l) => [l.toLowerCase(), l] as const)
+    ).values()
+  ].join(' | ')
   if (!workModes.length) {
     if (isRemoteText(`${title} ${locBlob}`)) workModes.push('remote')
     if (isHybridText(`${title} ${locBlob}`)) workModes.push('hybrid')

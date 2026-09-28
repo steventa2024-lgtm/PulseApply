@@ -65,6 +65,7 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
   if (migration?.performed)
     log.info('startup', `Legacy import: ${JSON.stringify(migration.imported)}`)
 
+  bootstrapSecretsFromEnv(store, process.env)
   const http = new HttpClient({
     userAgent: `PulseApply/${opts.appVersion} (desktop job-search assistant)`,
     fetchImpl: opts.fetchImpl
@@ -170,4 +171,34 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
       return shuttingDown
     }
   }
+}
+
+/**
+ * Optional developer convenience: credentials present in the environment
+ * (see .env.example) are copied into the encrypted secret store once, only
+ * when the store has no value for that key. Values are never logged.
+ */
+export const ENV_SECRETS: Record<string, string> = {
+  ADZUNA_APP_ID: 'adzuna.appId',
+  ADZUNA_APP_KEY: 'adzuna.appKey',
+  JOOBLE_API_KEY: 'jooble.apiKey',
+  JOOBLE_REGIONAL_KEYS: 'jooble.regionalKeys',
+  USAJOBS_API_KEY: 'usajobs.apiKey',
+  USAJOBS_EMAIL: 'usajobs.email',
+  BRAVE_SEARCH_API_KEY: 'brave.apiKey',
+  TELEGRAM_BOT_TOKEN: 'telegram.botToken'
+}
+
+export function bootstrapSecretsFromEnv(store: Store, env: NodeJS.ProcessEnv): string[] {
+  const imported: string[] = []
+  for (const [envKey, secretKey] of Object.entries(ENV_SECRETS)) {
+    const v = env[envKey]?.trim()
+    if (v && !store.secrets.has(secretKey)) {
+      store.secrets.set(secretKey, v)
+      imported.push(secretKey)
+    }
+  }
+  if (imported.length)
+    log.info('startup', `Imported ${imported.length} credential(s) from environment variables`)
+  return imported
 }

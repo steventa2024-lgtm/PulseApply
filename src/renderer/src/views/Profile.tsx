@@ -1,4 +1,4 @@
-import { useEffect, useState, type DragEvent } from 'react'
+import { useEffect, useId, useState, type DragEvent } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -754,10 +754,12 @@ function FieldEditor({
   field: ExtractedField
   onChange: (f: ExtractedField) => void
 }): React.JSX.Element {
+  const id = useId()
   const uncertain = !field.confirmed && field.source === 'resume' && field.confidence < 0.85
   return (
     <div>
       <Label
+        htmlFor={id}
         hint={
           field.value && field.source === 'resume'
             ? `(from resume, ${Math.round(field.confidence * 100)}% confidence)`
@@ -768,6 +770,7 @@ function FieldEditor({
       </Label>
       <div className="flex items-center gap-2">
         <Input
+          id={id}
           className={cx(uncertain && 'border-amber-500/50')}
           value={field.value}
           onChange={(e) =>

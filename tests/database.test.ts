@@ -228,3 +228,19 @@ describe('SQLite persistence', () => {
     await again.shutdown()
   })
 })
+
+describe('environment credential bootstrap', () => {
+  it('imports env credentials once without overwriting configured values', async () => {
+    const { bootstrapSecretsFromEnv } = await import('../src/main/app/services')
+    const { svc } = await makeServices()
+    svc.store.secrets.set('adzuna.appKey', 'already-set-key')
+    const imported = bootstrapSecretsFromEnv(svc.store, {
+      ADZUNA_APP_ID: 'env-app-id',
+      ADZUNA_APP_KEY: 'env-key-should-not-win'
+    })
+    expect(imported).toEqual(['adzuna.appId'])
+    expect(svc.store.secrets.get('adzuna.appId')).toBe('env-app-id')
+    expect(svc.store.secrets.get('adzuna.appKey')).toBe('already-set-key')
+    await svc.shutdown()
+  })
+})
