@@ -65,7 +65,9 @@ export class Scheduler {
     }
   }
 
-  runNow(id: string): Promise<{ resultCount: number; newCount: number; notified: number } | undefined> {
+  runNow(
+    id: string
+  ): Promise<{ resultCount: number; newCount: number; notified: number } | undefined> {
     const s = this.deps.store.searches.get(id)
     if (!s) throw new Error('Saved search not found')
     return this.runSearch(s, 'manual')
@@ -77,7 +79,10 @@ export class Scheduler {
     return !!c
   }
 
-  async runSearch(s: SavedSearch, trigger: 'scheduled' | 'manual'): Promise<{ resultCount: number; newCount: number; notified: number } | undefined> {
+  async runSearch(
+    s: SavedSearch,
+    trigger: 'scheduled' | 'manual'
+  ): Promise<{ resultCount: number; newCount: number; notified: number } | undefined> {
     const { store } = this.deps
     if (this.running.has(s.id) || !store.searches.claim(s.id)) {
       log.info('scheduler', `Search "${s.name}" is already running; skipped`)
@@ -87,16 +92,28 @@ export class Scheduler {
     this.running.set(s.id, controller)
     this.deps.onUpdate?.()
     try {
-      const result = await this.deps.search.run(s.criteria, { trigger: trigger === 'manual' ? 'scheduled' : trigger, searchId: s.id, signal: controller.signal })
+      const result = await this.deps.search.run(s.criteria, {
+        trigger: trigger === 'manual' ? 'scheduled' : trigger,
+        searchId: s.id,
+        signal: controller.signal
+      })
       if (result.cancelled) {
         store.searches.release(s.id)
         return undefined
       }
       const visible = result.jobs.filter((j) => !j.state.dismissed)
-      const fresh = store.searches.markSeen(s.id, visible.map((j) => j.id))
+      const fresh = store.searches.markSeen(
+        s.id,
+        visible.map((j) => j.id)
+      )
       let notified = 0
       if (s.notify && this.deps.telegram?.isRunning()) {
-        const pending = new Set(store.searches.unnotified(s.id, visible.map((j) => j.id)))
+        const pending = new Set(
+          store.searches.unnotified(
+            s.id,
+            visible.map((j) => j.id)
+          )
+        )
         const qualifying: ScoredJob[] = visible.filter(
           (j) =>
             pending.has(j.id) &&
@@ -105,8 +122,15 @@ export class Scheduler {
         )
         if (qualifying.length) {
           try {
-            notified = await this.deps.telegram.sendJobBatch(qualifying, { searchId: s.id, searchName: s.name })
-            if (notified) store.searches.markNotified(s.id, qualifying.map((j) => j.id))
+            notified = await this.deps.telegram.sendJobBatch(qualifying, {
+              searchId: s.id,
+              searchName: s.name
+            })
+            if (notified)
+              store.searches.markNotified(
+                s.id,
+                qualifying.map((j) => j.id)
+              )
           } catch (err) {
             log.warn('scheduler', `Telegram notification failed: ${(err as Error).message}`)
           }

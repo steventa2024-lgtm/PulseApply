@@ -47,7 +47,12 @@ export class ApplicationManager {
     })
   }
 
-  private move(id: string, to: ApplicationState, message: string, patch: Parameters<Store['applications']['transition']>[3] = {}): ApplicationRecord {
+  private move(
+    id: string,
+    to: ApplicationState,
+    message: string,
+    patch: Parameters<Store['applications']['transition']>[3] = {}
+  ): ApplicationRecord {
     const app = this.store.applications.transition(id, to, message, patch)
     this.deps.emit(app)
     return app
@@ -86,15 +91,22 @@ export class ApplicationManager {
   }
 
   /** Opens the real application page in a visible browser and autofills it. */
-  async start(jobId: string, opts: { resumeId?: string; origin?: ApplicationRecord['origin'] } = {}): Promise<ApplicationRecord> {
+  async start(
+    jobId: string,
+    opts: { resumeId?: string; origin?: ApplicationRecord['origin'] } = {}
+  ): Promise<ApplicationRecord> {
     const job = this.store.jobs.get(jobId)
     if (!job) throw new ApplicationError('Job not found')
     const demo = !!job.isDemo
     const settings = this.store.settings.get()
-    if (demo && !settings.demoMode) throw new ApplicationError('Demo jobs can only be used in demo mode')
+    if (demo && !settings.demoMode)
+      throw new ApplicationError('Demo jobs can only be used in demo mode')
     const url = job.applyUrl ?? job.sourceUrl
-    if (!demo && !this.urlAllowed(url)) throw new ApplicationError('This job has no valid application link')
-    const resume = opts.resumeId ? this.store.candidate.resume(opts.resumeId) : this.store.candidate.defaultResume()
+    if (!demo && !this.urlAllowed(url))
+      throw new ApplicationError('This job has no valid application link')
+    const resume = opts.resumeId
+      ? this.store.candidate.resume(opts.resumeId)
+      : this.store.candidate.defaultResume()
     const latest = this.store.applications.latestForJob(jobId)
     let app: ApplicationRecord
     if (latest && latest.state === 'QUEUED') {
@@ -113,7 +125,9 @@ export class ApplicationManager {
       })
       this.deps.emit(app)
     }
-    void this.serialize(app.id, () => this.openAndFill(app.id)).catch((err) => log.error('apply', err))
+    void this.serialize(app.id, () => this.openAndFill(app.id)).catch((err) =>
+      log.error('apply', err)
+    )
     return app
   }
 
@@ -124,25 +138,37 @@ export class ApplicationManager {
       const session = await this.deps.browser.open(id, () => this.onBrowserClosed(id))
       const page = session.page
       if (app.isDemo) {
-        await page.setContent(demoFormHtml(job?.title ?? 'Demo job', job?.company ?? 'Demo employer'))
+        await page.setContent(
+          demoFormHtml(job?.title ?? 'Demo job', job?.company ?? 'Demo employer')
+        )
       } else {
         await page.goto(app.applyUrl ?? app.sourceUrl, { waitUntil: 'domcontentloaded' })
         await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => undefined)
       }
       const finalUrl = page.url()
       if (!app.isDemo && !this.urlAllowed(finalUrl)) {
-        this.move(id, 'FAILED', 'Application link redirected to an unsafe address', { error: `Redirected to ${finalUrl}` })
+        this.move(id, 'FAILED', 'Application link redirected to an unsafe address', {
+          error: `Redirected to ${finalUrl}`
+        })
         await this.deps.browser.close(id)
         return
       }
       const manual = app.isDemo ? undefined : manualReason(finalUrl)
       if (manual) {
-        this.move(id, 'MANUAL_COMPLETION_REQUIRED', manual, { currentUrl: finalUrl, blockers: [manual] })
+        this.move(id, 'MANUAL_COMPLETION_REQUIRED', manual, {
+          currentUrl: finalUrl,
+          blockers: [manual]
+        })
         await page.bringToFront().catch(() => undefined)
         return
       }
       const adapter = adapterFor(finalUrl)
-      this.move(id, 'AUTOFILLING', `Detected ${app.isDemo ? 'demo form' : adapter.label}; filling fields`, { currentUrl: finalUrl, adapter: app.isDemo ? 'demo' : adapter.id })
+      this.move(
+        id,
+        'AUTOFILLING',
+        `Detected ${app.isDemo ? 'demo form' : adapter.label}; filling fields`,
+        { currentUrl: finalUrl, adapter: app.isDemo ? 'demo' : adapter.id }
+      )
       if (!app.isDemo) await adapter.prepare(page)
       await this.fillAndAssess(id, page, adapter.notes)
     } catch (err) {
@@ -167,7 +193,9 @@ export class ApplicationManager {
           await loc.selectOption({ index: a.optionIndex! })
           return true
         case 'radio': {
-          const opt = frame.locator(`[data-pa-field="${localKey}"][data-pa-option="${a.optionIndex}"]`).first()
+          const opt = frame
+            .locator(`[data-pa-field="${localKey}"][data-pa-option="${a.optionIndex}"]`)
+            .first()
           await opt.check().catch(() => opt.check({ force: true }))
           return await opt.isChecked()
         }
@@ -177,10 +205,17 @@ export class ApplicationManager {
         case 'upload':
           if (!fs.existsSync(a.value)) return false
           await loc.setInputFiles(a.value)
-          return (await loc.evaluate((el) => (el as unknown as { files: { length: number } }).files.length)) === 1
+          return (
+            (await loc.evaluate(
+              (el) => (el as unknown as { files: { length: number } }).files.length
+            )) === 1
+          )
       }
     } catch (err) {
-      log.warn('apply', `Could not fill "${a.field.label}": ${(err as Error).message.split('\n')[0]}`)
+      log.warn(
+        'apply',
+        `Could not fill "${a.field.label}": ${(err as Error).message.split('\n')[0]}`
+      )
       return false
     }
   }
@@ -188,7 +223,12 @@ export class ApplicationManager {
   private requiredIssues(insp: FormInspection): FieldIssue[] {
     return insp.fields
       .filter((f) => f.required && !f.filled)
-      .map((f) => ({ label: f.label || f.name, reason: 'required_empty' as const, required: true, type: f.kind }))
+      .map((f) => ({
+        label: f.label || f.name,
+        reason: 'required_empty' as const,
+        required: true,
+        type: f.kind
+      }))
   }
 
   /** One inspection -> mapping -> fill -> re-inspection pass, then decides the next state. */
@@ -196,28 +236,41 @@ export class ApplicationManager {
     const app = this.get(id)
     const job = this.store.jobs.get(app.jobId)
     const profile = this.store.candidate.get()
-    const resume = app.resumeId ? this.store.candidate.resume(app.resumeId) : this.store.candidate.defaultResume()
+    const resume = app.resumeId
+      ? this.store.candidate.resume(app.resumeId)
+      : this.store.candidate.defaultResume()
     let insp = await inspectPage(page)
     const formFields = insp.fields.filter((f) => f.kind !== 'checkbox')
 
     if (insp.hasPasswordField && formFields.length <= 3) {
-      this.move(id, 'NEEDS_USER_INPUT', 'This site asks you to sign in or create an account. Do that in the browser window, then click “Re-scan form”.', {
-        currentUrl: page.url(),
-        blockers: ['Sign-in / account creation required']
-      })
+      this.move(
+        id,
+        'NEEDS_USER_INPUT',
+        'This site asks you to sign in or create an account. Do that in the browser window, then click “Re-scan form”.',
+        {
+          currentUrl: page.url(),
+          blockers: ['Sign-in / account creation required']
+        }
+      )
       return
     }
     if (formFields.length === 0) {
-      this.move(id, 'MANUAL_COMPLETION_REQUIRED', 'No application form was detected on this page. Continue in the browser window.', {
-        currentUrl: page.url(),
-        blockers: ['No application form detected']
-      })
+      this.move(
+        id,
+        'MANUAL_COMPLETION_REQUIRED',
+        'No application form was detected on this page. Continue in the browser window.',
+        {
+          currentUrl: page.url(),
+          blockers: ['No application form detected']
+        }
+      )
       return
     }
 
     const mapping = mapFields(insp.fields, {
       profile,
-      resumePath: resume?.storedPath && fs.existsSync(resume.storedPath) ? resume.storedPath : undefined,
+      resumePath:
+        resume?.storedPath && fs.existsSync(resume.storedPath) ? resume.storedPath : undefined,
       jobCountry: job?.locations.find((l) => l.country)?.country
     })
     const filled = [...app.filledFields]
@@ -225,9 +278,15 @@ export class ApplicationManager {
     for (const a of mapping.actions) {
       const ok = await this.perform(page, a)
       if (ok) {
-        if (!filled.some((f) => f.label === a.field.label)) filled.push({ label: a.field.label || a.field.name, profileKey: a.profileKey })
+        if (!filled.some((f) => f.label === a.field.label))
+          filled.push({ label: a.field.label || a.field.name, profileKey: a.profileKey })
       } else {
-        issues.push({ label: a.field.label || a.field.name, reason: 'unsupported_input', required: a.field.required, type: a.field.kind })
+        issues.push({
+          label: a.field.label || a.field.name,
+          reason: 'unsupported_input',
+          required: a.field.required,
+          type: a.field.kind
+        })
       }
     }
 
@@ -241,27 +300,46 @@ export class ApplicationManager {
       return !f || !f.filled
     })
     const blockers: string[] = []
-    if (insp.hasCaptcha) blockers.push('CAPTCHA/verification present — you must complete it yourself; PulseApply will not solve it.')
-    if (!insp.submitButton && insp.nextButton) blockers.push(`Multi-step form: this page has “${insp.nextButton.text}” instead of Submit. Review it, then use “Continue to next step”.`)
+    if (insp.hasCaptcha)
+      blockers.push(
+        'CAPTCHA/verification present — you must complete it yourself; PulseApply will not solve it.'
+      )
+    if (!insp.submitButton && insp.nextButton)
+      blockers.push(
+        `Multi-step form: this page has “${insp.nextButton.text}” instead of Submit. Review it, then use “Continue to next step”.`
+      )
     if (!resume) blockers.push('No resume uploaded — add one on the Profile page.')
     for (const n of notes) if (insp.hasCaptcha && /captcha/i.test(n)) blockers.push(n)
 
-    const needsUser = openIssues.some((i) => i.required) || insp.hasCaptcha || (!insp.submitButton && !insp.nextButton)
+    const needsUser =
+      openIssues.some((i) => i.required) ||
+      insp.hasCaptcha ||
+      (!insp.submitButton && !insp.nextButton)
     await page.bringToFront().catch(() => undefined)
     if (needsUser) {
-      this.move(id, 'NEEDS_USER_INPUT', `Filled ${filled.length} field(s); ${openIssues.filter((i) => i.required).length} required item(s) need your input`, {
-        filledFields: filled,
-        issues: openIssues,
-        blockers,
-        currentUrl: page.url()
-      })
+      this.move(
+        id,
+        'NEEDS_USER_INPUT',
+        `Filled ${filled.length} field(s); ${openIssues.filter((i) => i.required).length} required item(s) need your input`,
+        {
+          filledFields: filled,
+          issues: openIssues,
+          blockers,
+          currentUrl: page.url()
+        }
+      )
     } else {
-      this.move(id, 'READY_FOR_REVIEW', `Filled ${filled.length} field(s). Review the form in the browser, then approve to submit.`, {
-        filledFields: filled,
-        issues: openIssues,
-        blockers,
-        currentUrl: page.url()
-      })
+      this.move(
+        id,
+        'READY_FOR_REVIEW',
+        `Filled ${filled.length} field(s). Review the form in the browser, then approve to submit.`,
+        {
+          filledFields: filled,
+          issues: openIssues,
+          blockers,
+          currentUrl: page.url()
+        }
+      )
     }
   }
 
@@ -270,8 +348,13 @@ export class ApplicationManager {
     return this.serialize(id, async () => {
       const app = this.get(id)
       const session = this.deps.browser.get(id)
-      if (!session) throw new ApplicationError('The browser window for this application is closed. Use “Reopen”.')
-      if (!['NEEDS_USER_INPUT', 'READY_FOR_REVIEW', 'MANUAL_COMPLETION_REQUIRED'].includes(app.state)) {
+      if (!session)
+        throw new ApplicationError(
+          'The browser window for this application is closed. Use “Reopen”.'
+        )
+      if (
+        !['NEEDS_USER_INPUT', 'READY_FOR_REVIEW', 'MANUAL_COMPLETION_REQUIRED'].includes(app.state)
+      ) {
         throw new ApplicationError(`Cannot re-scan in state ${app.state}`)
       }
       this.move(id, 'AUTOFILLING', 'Re-scanning form')
@@ -286,10 +369,13 @@ export class ApplicationManager {
       const app = this.get(id)
       const session = this.deps.browser.get(id)
       if (!session) throw new ApplicationError('The browser window for this application is closed.')
-      if (!['NEEDS_USER_INPUT', 'READY_FOR_REVIEW'].includes(app.state)) throw new ApplicationError(`Cannot continue in state ${app.state}`)
+      if (!['NEEDS_USER_INPUT', 'READY_FOR_REVIEW'].includes(app.state))
+        throw new ApplicationError(`Cannot continue in state ${app.state}`)
       const insp = await inspectPage(session.page)
-      if (!insp.nextButton) throw new ApplicationError('No “Next/Continue” button found on this page.')
-      if (this.requiredIssues(insp).length) throw new ApplicationError('Fill the required fields on this step first.')
+      if (!insp.nextButton)
+        throw new ApplicationError('No “Next/Continue” button found on this page.')
+      if (this.requiredIssues(insp).length)
+        throw new ApplicationError('Fill the required fields on this step first.')
       this.move(id, 'AUTOFILLING', `Continuing to next step (“${insp.nextButton.text}”)`)
       const { frame, localKey } = frameFor(session.page, insp.nextButton.key)
       await frame.locator(`[data-pa-button="${localKey}"]`).first().click()
@@ -307,30 +393,51 @@ export class ApplicationManager {
   approveAndSubmit(id: string): Promise<ApplicationRecord> {
     return this.serialize(id, async () => {
       const app = this.get(id)
-      if (app.state !== 'READY_FOR_REVIEW') throw new ApplicationError(`Only applications that are ready for review can be approved (current: ${app.state})`)
+      if (app.state !== 'READY_FOR_REVIEW')
+        throw new ApplicationError(
+          `Only applications that are ready for review can be approved (current: ${app.state})`
+        )
       const session = this.deps.browser.get(id)
-      if (!session) throw new ApplicationError('The browser window for this application is closed. Reopen it before approving.')
+      if (!session)
+        throw new ApplicationError(
+          'The browser window for this application is closed. Reopen it before approving.'
+        )
       const page = session.page
       const pre = await inspectPage(page)
       const missing = this.requiredIssues(pre)
       if (pre.hasCaptcha || missing.length || !pre.submitButton) {
-        return this.move(id, 'NEEDS_USER_INPUT', pre.hasCaptcha ? 'A CAPTCHA must be completed by you before submitting' : !pre.submitButton ? 'No submit button found on this page' : 'Required fields are empty', {
-          issues: missing,
-          blockers: pre.hasCaptcha ? ['CAPTCHA present — complete it, submit yourself, then use “Check confirmation”.'] : []
-        })
+        return this.move(
+          id,
+          'NEEDS_USER_INPUT',
+          pre.hasCaptcha
+            ? 'A CAPTCHA must be completed by you before submitting'
+            : !pre.submitButton
+              ? 'No submit button found on this page'
+              : 'Required fields are empty',
+          {
+            issues: missing,
+            blockers: pre.hasCaptcha
+              ? ['CAPTCHA present — complete it, submit yourself, then use “Check confirmation”.']
+              : []
+          }
+        )
       }
       this.move(id, 'APPROVED', 'Approved for submission by you')
       this.move(id, 'SUBMITTING', `Clicking “${pre.submitButton.text}”`)
       const before = { url: page.url(), hadForm: true }
       const origin = new URL(page.url()).origin
       const responses: AtsResponseSignal[] = []
-      const onResponse = async (res: import('playwright').Response) => {
+      const onResponse = async (res: import('playwright').Response): Promise<void> => {
         try {
           const req = res.request()
           if (req.method() !== 'POST' || !res.url().startsWith(origin)) return
           const ct = res.headers()['content-type'] ?? ''
           if (!/json/.test(ct)) return
-          responses.push({ url: res.url(), status: res.status(), body: (await res.text()).slice(0, 5000) })
+          responses.push({
+            url: res.url(),
+            status: res.status(),
+            body: (await res.text()).slice(0, 5000)
+          })
         } catch {
           // body unavailable
         }
@@ -348,17 +455,33 @@ export class ApplicationManager {
         const verdict = evaluateSubmission(before, after, responses)
         switch (verdict.outcome) {
           case 'submitted':
-            return this.move(id, 'SUBMITTED', 'Submission confirmed by the application site', { addEvidence: verdict.evidence, currentUrl: page.url() })
+            return this.move(id, 'SUBMITTED', 'Submission confirmed by the application site', {
+              addEvidence: verdict.evidence,
+              currentUrl: page.url()
+            })
           case 'failed':
-            return this.move(id, 'FAILED', verdict.reason, { error: verdict.reason, currentUrl: page.url() })
+            return this.move(id, 'FAILED', verdict.reason, {
+              error: verdict.reason,
+              currentUrl: page.url()
+            })
           case 'blocked':
-            return this.move(id, 'NEEDS_USER_INPUT', verdict.reason, { blockers: [verdict.reason], currentUrl: page.url() })
+            return this.move(id, 'NEEDS_USER_INPUT', verdict.reason, {
+              blockers: [verdict.reason],
+              currentUrl: page.url()
+            })
           default:
-            return this.move(id, 'SUBMISSION_UNVERIFIED', verdict.reason, { currentUrl: page.url() })
+            return this.move(id, 'SUBMISSION_UNVERIFIED', verdict.reason, {
+              currentUrl: page.url()
+            })
         }
       } catch (err) {
         const msg = (err as Error).message.split('\n')[0]
-        return this.move(id, 'SUBMISSION_UNVERIFIED', `Submission outcome unknown: ${msg}. Do not re-submit until you have checked the site or your email.`, { error: msg })
+        return this.move(
+          id,
+          'SUBMISSION_UNVERIFIED',
+          `Submission outcome unknown: ${msg}. Do not re-submit until you have checked the site or your email.`,
+          { error: msg }
+        )
       } finally {
         page.off('response', onResponse)
       }
@@ -366,19 +489,30 @@ export class ApplicationManager {
   }
 
   /** For forms the user submitted themselves: looks for confirmation on the current page. */
-  checkConfirmation(id: string): Promise<{ app: ApplicationRecord; confirmed: boolean; message: string }> {
+  checkConfirmation(
+    id: string
+  ): Promise<{ app: ApplicationRecord; confirmed: boolean; message: string }> {
     return this.serialize(id, async () => {
       const app = this.get(id)
       const session = this.deps.browser.get(id)
-      if (!session) throw new ApplicationError('The browser window is closed, so the page cannot be checked.')
+      if (!session)
+        throw new ApplicationError('The browser window is closed, so the page cannot be checked.')
       const insp = await inspectPage(session.page)
       const verdict = evaluateSubmission({ url: '', hadForm: true }, insp)
       if (verdict.outcome === 'submitted') {
-        if (app.state === 'SUBMITTED') return { app, confirmed: true, message: 'Already confirmed.' }
-        const moved = this.move(id, 'SUBMITTED', 'Confirmation observed on the application site', { addEvidence: verdict.evidence, currentUrl: insp.url })
+        if (app.state === 'SUBMITTED')
+          return { app, confirmed: true, message: 'Already confirmed.' }
+        const moved = this.move(id, 'SUBMITTED', 'Confirmation observed on the application site', {
+          addEvidence: verdict.evidence,
+          currentUrl: insp.url
+        })
         return { app: moved, confirmed: true, message: 'Submission confirmed.' }
       }
-      return { app, confirmed: false, message: 'reason' in verdict ? verdict.reason : 'No confirmation found on this page.' }
+      return {
+        app,
+        confirmed: false,
+        message: 'reason' in verdict ? verdict.reason : 'No confirmation found on this page.'
+      }
     })
   }
 
@@ -386,12 +520,25 @@ export class ApplicationManager {
   reportManualSubmission(id: string, note?: string): Promise<ApplicationRecord> {
     return this.serialize(id, async () => {
       const app = this.get(id)
-      if (!['NEEDS_USER_INPUT', 'READY_FOR_REVIEW', 'MANUAL_COMPLETION_REQUIRED'].includes(app.state)) {
+      if (
+        !['NEEDS_USER_INPUT', 'READY_FOR_REVIEW', 'MANUAL_COMPLETION_REQUIRED'].includes(app.state)
+      ) {
         throw new ApplicationError(`Cannot record a manual submission in state ${app.state}`)
       }
-      return this.move(id, 'SUBMISSION_UNVERIFIED', 'You reported submitting this application yourself', {
-        addEvidence: [{ kind: 'user_report', detail: note?.slice(0, 300) || 'Reported by you; not observed by PulseApply', observedAt: new Date().toISOString() }]
-      })
+      return this.move(
+        id,
+        'SUBMISSION_UNVERIFIED',
+        'You reported submitting this application yourself',
+        {
+          addEvidence: [
+            {
+              kind: 'user_report',
+              detail: note?.slice(0, 300) || 'Reported by you; not observed by PulseApply',
+              observedAt: new Date().toISOString()
+            }
+          ]
+        }
+      )
     })
   }
 
@@ -399,7 +546,9 @@ export class ApplicationManager {
   reopen(id: string): Promise<ApplicationRecord> {
     return this.serialize(id, async () => {
       const app = this.get(id)
-      if (['NEEDS_USER_INPUT', 'MANUAL_COMPLETION_REQUIRED', 'READY_FOR_REVIEW'].includes(app.state)) {
+      if (
+        ['NEEDS_USER_INPUT', 'MANUAL_COMPLETION_REQUIRED', 'READY_FOR_REVIEW'].includes(app.state)
+      ) {
         this.move(id, 'AUTOFILLING', 'Reopening application page')
       } else if (app.state === 'FAILED') {
         this.move(id, 'OPENING', 'Retrying (started by you)')
@@ -417,7 +566,8 @@ export class ApplicationManager {
     return this.serialize(id, async () => {
       const app = this.get(id)
       await this.deps.browser.close(id)
-      if (['SUBMITTED', 'SUBMISSION_UNVERIFIED', 'CANCELLED', 'SUBMITTING'].includes(app.state)) return app
+      if (['SUBMITTED', 'SUBMISSION_UNVERIFIED', 'CANCELLED', 'SUBMITTING'].includes(app.state))
+        return app
       return this.move(id, 'CANCELLED', 'Cancelled by you')
     })
   }
@@ -426,12 +576,27 @@ export class ApplicationManager {
     const app = this.store.applications.get(id)
     if (!app) return
     if (app.state === 'SUBMITTING') {
-      this.move(id, 'SUBMISSION_UNVERIFIED', 'The browser closed while submitting; the outcome could not be verified.')
+      this.move(
+        id,
+        'SUBMISSION_UNVERIFIED',
+        'The browser closed while submitting; the outcome could not be verified.'
+      )
     } else if (ACTIVE_STATES.includes(app.state) && app.state !== 'QUEUED') {
-      this.move(id, app.state === 'OPENING' || app.state === 'AUTOFILLING' ? 'FAILED' : app.state, 'Browser window closed', {
-        blockers: [...app.blockers.filter((b) => !/window closed/.test(b)), 'Browser window closed — use “Reopen” to continue.'],
-        error: app.state === 'OPENING' || app.state === 'AUTOFILLING' ? 'Browser window closed' : undefined
-      })
+      this.move(
+        id,
+        app.state === 'OPENING' || app.state === 'AUTOFILLING' ? 'FAILED' : app.state,
+        'Browser window closed',
+        {
+          blockers: [
+            ...app.blockers.filter((b) => !/window closed/.test(b)),
+            'Browser window closed — use “Reopen” to continue.'
+          ],
+          error:
+            app.state === 'OPENING' || app.state === 'AUTOFILLING'
+              ? 'Browser window closed'
+              : undefined
+        }
+      )
     }
   }
 

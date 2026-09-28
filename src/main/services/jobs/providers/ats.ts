@@ -1,5 +1,11 @@
 import { z } from 'zod'
-import type { AtsProvider, EmployerRecord, EmploymentType, SalaryPeriod, WorkMode } from '../../../../shared/types'
+import type {
+  AtsProvider,
+  EmployerRecord,
+  EmploymentType,
+  SalaryPeriod,
+  WorkMode
+} from '../../../../shared/types'
 import type { JobProvider, ProviderContext, ProviderQuery, RawRecord } from './types'
 import { isoFromString, isoFromUnix, matchesKeywords, num, str } from './types'
 import type { HttpClient } from '../adapters/http'
@@ -22,9 +28,14 @@ export interface BoardValidation {
 
 const MAX_JOBS_PER_BOARD = 500
 
-function employersFor(provider: AtsProvider, ctx: ProviderContext, q: ProviderQuery): EmployerRecord[] {
+function employersFor(
+  provider: AtsProvider,
+  ctx: ProviderContext,
+  q: ProviderQuery
+): EmployerRecord[] {
   return ctx.employers.filter((e) => {
-    if (e.atsProvider !== provider || e.status === 'invalid' || e.status === 'disabled') return false
+    if (e.atsProvider !== provider || e.status === 'invalid' || e.status === 'disabled')
+      return false
     // Skip employers pinned to a different country when the search is local to one country.
     if (e.country && q.country && !q.wantsRemote && e.country !== q.country) return false
     return true
@@ -52,14 +63,20 @@ async function perEmployer(
       } else {
         const err = res.reason as Error
         const invalid = err instanceof HttpError && err.status === 404
-        ctx.onEmployerSynced?.(e.id, invalid ? 'invalid' : 'error', invalid ? 'Board not found (404)' : err.message)
+        ctx.onEmployerSynced?.(
+          e.id,
+          invalid ? 'invalid' : 'error',
+          invalid ? 'Board not found (404)' : err.message
+        )
         errors.push(`${e.name}: ${err.message}`)
       }
     })
     if (ctx.signal.aborted) break
   }
   if (employers.length && out.length === 0 && errors.length === employers.length) {
-    throw new Error(`All ${employers.length} employer board(s) failed: ${errors.slice(0, 3).join('; ')}`)
+    throw new Error(
+      `All ${employers.length} employer board(s) failed: ${errors.slice(0, 3).join('; ')}`
+    )
   }
   return out
 }
@@ -81,22 +98,54 @@ const GhJob = z
     updated_at: z.string().optional(),
     first_published: z.string().optional(),
     requisition_id: z.string().nullable().optional(),
-    location: z.object({ name: z.string().nullable().optional() }).passthrough().nullable().optional(),
+    location: z
+      .object({ name: z.string().nullable().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
     absolute_url: z.string(),
     content: z.string().optional(),
     departments: z.array(z.object({ name: z.string().optional() }).passthrough()).optional(),
-    offices: z.array(z.object({ name: z.string().optional(), location: z.string().nullable().optional() }).passthrough()).optional(),
+    offices: z
+      .array(
+        z
+          .object({ name: z.string().optional(), location: z.string().nullable().optional() })
+          .passthrough()
+      )
+      .optional(),
     company_name: z.string().optional()
   })
   .passthrough()
 
-export async function validateGreenhouse(http: HttpClient, board: string, signal?: AbortSignal): Promise<BoardValidation> {
+export async function validateGreenhouse(
+  http: HttpClient,
+  board: string,
+  signal?: AbortSignal
+): Promise<BoardValidation> {
   try {
-    const info = await http.json<{ name?: string }>({ url: `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}`, signal, retries: 1 })
-    const jobs = await http.json<{ jobs?: unknown[] }>({ url: `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}/jobs`, signal, retries: 1 })
-    return { ok: true, name: info?.name, count: Array.isArray(jobs?.jobs) ? jobs.jobs.length : undefined }
+    const info = await http.json<{ name?: string }>({
+      url: `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}`,
+      signal,
+      retries: 1
+    })
+    const jobs = await http.json<{ jobs?: unknown[] }>({
+      url: `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}/jobs`,
+      signal,
+      retries: 1
+    })
+    return {
+      ok: true,
+      name: info?.name,
+      count: Array.isArray(jobs?.jobs) ? jobs.jobs.length : undefined
+    }
   } catch (err) {
-    return { ok: false, error: err instanceof HttpError && err.status === 404 ? 'No Greenhouse board with that identifier' : (err as Error).message }
+    return {
+      ok: false,
+      error:
+        err instanceof HttpError && err.status === 404
+          ? 'No Greenhouse board with that identifier'
+          : (err as Error).message
+    }
   }
 }
 
@@ -104,13 +153,17 @@ export const greenhouseProvider: JobProvider = {
   id: 'greenhouse',
   name: 'Greenhouse (employer boards)',
   kind: 'ats',
-  description: 'Official public job boards of employers that use Greenhouse. Add employers on the Sources page.',
+  description:
+    'Official public job boards of employers that use Greenhouse. Add employers on the Sources page.',
   markets: 'Any employer with a public Greenhouse board you add',
   docsUrl: 'https://developers.greenhouse.io/job-board.html',
   termsNote: 'Public Job Board API; no key needed. Each request covers one employer.',
   credentials: [],
   defaultEnabled: true,
-  rateLimit: { minIntervalMs: 300, note: 'One request per registered employer, 3 in parallel, cached 1 hour.' },
+  rateLimit: {
+    minIntervalMs: 300,
+    note: 'One request per registered employer, 3 in parallel, cached 1 hour.'
+  },
   cacheTtlMs: 60 * 60_000,
   timeoutMs: 20_000,
   hosts: ['boards-api.greenhouse.io'],
@@ -123,13 +176,21 @@ export const greenhouseProvider: JobProvider = {
         signal: ctx.signal,
         timeoutMs: this.timeoutMs
       })
-      if (!data || !Array.isArray(data.jobs)) throw new Error('Unexpected Greenhouse response shape')
+      if (!data || !Array.isArray(data.jobs))
+        throw new Error('Unexpected Greenhouse response shape')
       const out: RawRecord[] = []
       for (const j of data.jobs.slice(0, MAX_JOBS_PER_BOARD)) {
         const p = GhJob.safeParse(j)
         if (!p.success) continue
-        if (!keywordFilter(q, p.data.title, (p.data.departments ?? []).map((d) => d.name).join(' '))) continue
-        out.push({ sourceJobId: `${e.boardId}:${p.data.id}`, payload: p.data, context: { board: e.boardId, company: e.name } })
+        if (
+          !keywordFilter(q, p.data.title, (p.data.departments ?? []).map((d) => d.name).join(' '))
+        )
+          continue
+        out.push({
+          sourceJobId: `${e.boardId}:${p.data.id}`,
+          payload: p.data,
+          context: { board: e.boardId, company: e.name }
+        })
       }
       return out
     })
@@ -150,7 +211,12 @@ export const greenhouseProvider: JobProvider = {
       postedAt: isoFromString(d.first_published) ?? isoFromString(d.updated_at),
       tags: (d.departments ?? []).map((x) => x.name ?? '').filter(Boolean),
       employerDirect: true,
-      ats: { provider: 'greenhouse', board, postingId: String(d.id), requisitionId: d.requisition_id ?? undefined }
+      ats: {
+        provider: 'greenhouse',
+        board,
+        postingId: String(d.id),
+        requisitionId: d.requisition_id ?? undefined
+      }
     }
   }
 }
@@ -180,10 +246,19 @@ const LeverPosting = z
       .optional(),
     description: z.string().optional(),
     descriptionPlain: z.string().optional(),
-    lists: z.array(z.object({ text: z.string().optional(), content: z.string().optional() }).passthrough()).optional(),
+    lists: z
+      .array(
+        z.object({ text: z.string().optional(), content: z.string().optional() }).passthrough()
+      )
+      .optional(),
     additional: z.string().optional(),
     salaryRange: z
-      .object({ min: z.number().optional(), max: z.number().optional(), currency: z.string().optional(), interval: z.string().optional() })
+      .object({
+        min: z.number().optional(),
+        max: z.number().optional(),
+        currency: z.string().optional(),
+        interval: z.string().optional()
+      })
       .passthrough()
       .nullable()
       .optional()
@@ -198,31 +273,56 @@ const LEVER_INTERVAL: Record<string, SalaryPeriod> = {
   'per-hour-wage': 'hour'
 }
 
-async function leverList(http: HttpClient, company: string, signal: AbortSignal | undefined, timeoutMs: number): Promise<{ host: string; items: unknown[] }> {
+async function leverList(
+  http: HttpClient,
+  company: string,
+  signal: AbortSignal | undefined,
+  timeoutMs: number
+): Promise<{ host: string; items: unknown[] }> {
   for (const host of ['https://api.lever.co', 'https://api.eu.lever.co']) {
     try {
       const out: unknown[] = []
       for (let skip = 0; skip < MAX_JOBS_PER_BOARD; skip += 100) {
-        const items = await http.json<unknown[]>({ url: `${host}/v0/postings/${encodeURIComponent(company)}?mode=json&limit=100&skip=${skip}`, signal, timeoutMs })
+        const items = await http.json<unknown[]>({
+          url: `${host}/v0/postings/${encodeURIComponent(company)}?mode=json&limit=100&skip=${skip}`,
+          signal,
+          timeoutMs
+        })
         if (!Array.isArray(items)) throw new Error('Unexpected Lever response shape')
         out.push(...items)
         if (items.length < 100) break
       }
       return { host, items: out }
     } catch (err) {
-      if (err instanceof HttpError && err.status === 404 && host.includes('api.lever.co') && !host.includes('.eu.')) continue
+      if (
+        err instanceof HttpError &&
+        err.status === 404 &&
+        host.includes('api.lever.co') &&
+        !host.includes('.eu.')
+      )
+        continue
       throw err
     }
   }
   throw new HttpError('Lever company not found', 404, company)
 }
 
-export async function validateLever(http: HttpClient, company: string, signal?: AbortSignal): Promise<BoardValidation> {
+export async function validateLever(
+  http: HttpClient,
+  company: string,
+  signal?: AbortSignal
+): Promise<BoardValidation> {
   try {
     const { items } = await leverList(http, company, signal, 15_000)
     return { ok: true, count: items.length }
   } catch (err) {
-    return { ok: false, error: err instanceof HttpError && err.status === 404 ? 'No Lever postings site with that identifier' : (err as Error).message }
+    return {
+      ok: false,
+      error:
+        err instanceof HttpError && err.status === 404
+          ? 'No Lever postings site with that identifier'
+          : (err as Error).message
+    }
   }
 }
 
@@ -230,13 +330,17 @@ export const leverProvider: JobProvider = {
   id: 'lever',
   name: 'Lever (employer boards)',
   kind: 'ats',
-  description: 'Official public postings of employers that use Lever. Add employers on the Sources page.',
+  description:
+    'Official public postings of employers that use Lever. Add employers on the Sources page.',
   markets: 'Any employer with a public Lever postings site you add',
   docsUrl: 'https://github.com/lever/postings-api',
   termsNote: 'Public Postings API; no key needed. Each request covers one employer.',
   credentials: [],
   defaultEnabled: true,
-  rateLimit: { minIntervalMs: 300, note: 'One request per registered employer, 3 in parallel, cached 1 hour.' },
+  rateLimit: {
+    minIntervalMs: 300,
+    note: 'One request per registered employer, 3 in parallel, cached 1 hour.'
+  },
   cacheTtlMs: 60 * 60_000,
   timeoutMs: 20_000,
   hosts: ['api.lever.co', 'api.eu.lever.co'],
@@ -249,17 +353,37 @@ export const leverProvider: JobProvider = {
       for (const j of items) {
         const p = LeverPosting.safeParse(j)
         if (!p.success) continue
-        if (!keywordFilter(q, p.data.text, `${p.data.categories?.team ?? ''} ${p.data.categories?.department ?? ''}`)) continue
-        out.push({ sourceJobId: p.data.id, payload: p.data, context: { board: e.boardId, company: e.name } })
+        if (
+          !keywordFilter(
+            q,
+            p.data.text,
+            `${p.data.categories?.team ?? ''} ${p.data.categories?.department ?? ''}`
+          )
+        )
+          continue
+        out.push({
+          sourceJobId: p.data.id,
+          payload: p.data,
+          context: { board: e.boardId, company: e.name }
+        })
       }
       return out
     })
   },
   normalize(r) {
     const d = LeverPosting.parse(r.payload)
-    const lists = (d.lists ?? []).map((l) => `<h3>${l.text ?? ''}</h3><ul>${l.content ?? ''}</ul>`).join('')
+    const lists = (d.lists ?? [])
+      .map((l) => `<h3>${l.text ?? ''}</h3><ul>${l.content ?? ''}</ul>`)
+      .join('')
     const wt = (d.workplaceType ?? '').toLowerCase()
-    const modes: WorkMode[] | undefined = wt === 'remote' ? ['remote'] : wt === 'hybrid' ? ['hybrid'] : wt === 'on-site' || wt === 'onsite' ? ['onsite'] : undefined
+    const modes: WorkMode[] | undefined =
+      wt === 'remote'
+        ? ['remote']
+        : wt === 'hybrid'
+          ? ['hybrid']
+          : wt === 'on-site' || wt === 'onsite'
+            ? ['onsite']
+            : undefined
     const commitment = d.categories?.commitment ?? ''
     const sr = d.salaryRange
     const cc = str(d.country)?.toUpperCase()
@@ -271,12 +395,27 @@ export const leverProvider: JobProvider = {
       company: String(r.context?.company ?? r.context?.board),
       descriptionHtml: `${d.description ?? ''}${lists}${d.additional ?? ''}`,
       locationText: d.categories?.location ?? '',
-      extraLocations: (d.categories?.allLocations ?? []).filter((l) => l !== d.categories?.location),
-      places: cc && cc.length === 2 && !modes?.includes('remote') ? [{ country: cc, label: d.categories?.location }] : undefined,
+      extraLocations: (d.categories?.allLocations ?? []).filter(
+        (l) => l !== d.categories?.location
+      ),
+      places:
+        cc && cc.length === 2 && !modes?.includes('remote')
+          ? [{ country: cc, label: d.categories?.location }]
+          : undefined,
       workModes: modes,
-      remoteEligibilityText: modes?.includes('remote') ? d.categories?.location ?? (cc ? cc : undefined) : undefined,
+      remoteEligibilityText: modes?.includes('remote')
+        ? (d.categories?.location ?? (cc ? cc : undefined))
+        : undefined,
       employmentTypeText: commitment,
-      salary: sr && (sr.min || sr.max) ? { min: sr.min, max: sr.max, currency: sr.currency, period: LEVER_INTERVAL[sr.interval ?? ''] } : undefined,
+      salary:
+        sr && (sr.min || sr.max)
+          ? {
+              min: sr.min,
+              max: sr.max,
+              currency: sr.currency,
+              period: LEVER_INTERVAL[sr.interval ?? '']
+            }
+          : undefined,
       postedAt: isoFromUnix(d.createdAt),
       tags: [d.categories?.team, d.categories?.department].filter(Boolean) as string[],
       employerDirect: true,
@@ -294,7 +433,9 @@ const AshbyJob = z
     id: z.string(),
     title: z.string(),
     location: z.string().optional(),
-    secondaryLocations: z.array(z.object({ location: z.string().optional() }).passthrough()).optional(),
+    secondaryLocations: z
+      .array(z.object({ location: z.string().optional() }).passthrough())
+      .optional(),
     department: z.string().optional(),
     team: z.string().optional(),
     isListed: z.boolean().optional(),
@@ -307,7 +448,11 @@ const AshbyJob = z
     address: z
       .object({
         postalAddress: z
-          .object({ addressLocality: z.string().optional(), addressRegion: z.string().optional(), addressCountry: z.string().optional() })
+          .object({
+            addressLocality: z.string().optional(),
+            addressRegion: z.string().optional(),
+            addressCountry: z.string().optional()
+          })
           .passthrough()
           .optional()
       })
@@ -338,15 +483,35 @@ const AshbyJob = z
   })
   .passthrough()
 
-const ASHBY_TYPES: Record<string, EmploymentType> = { FullTime: 'full_time', PartTime: 'part_time', Intern: 'internship', Contract: 'contract', Temporary: 'temporary' }
+const ASHBY_TYPES: Record<string, EmploymentType> = {
+  FullTime: 'full_time',
+  PartTime: 'part_time',
+  Intern: 'internship',
+  Contract: 'contract',
+  Temporary: 'temporary'
+}
 
-export async function validateAshby(http: HttpClient, board: string, signal?: AbortSignal): Promise<BoardValidation> {
+export async function validateAshby(
+  http: HttpClient,
+  board: string,
+  signal?: AbortSignal
+): Promise<BoardValidation> {
   try {
-    const data = await http.json<{ jobs?: unknown[] }>({ url: `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board)}`, signal, retries: 1 })
+    const data = await http.json<{ jobs?: unknown[] }>({
+      url: `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board)}`,
+      signal,
+      retries: 1
+    })
     if (!Array.isArray(data?.jobs)) return { ok: false, error: 'Unexpected Ashby response' }
     return { ok: true, count: data.jobs.length }
   } catch (err) {
-    return { ok: false, error: err instanceof HttpError && err.status === 404 ? 'No Ashby job board with that name' : (err as Error).message }
+    return {
+      ok: false,
+      error:
+        err instanceof HttpError && err.status === 404
+          ? 'No Ashby job board with that name'
+          : (err as Error).message
+    }
   }
 }
 
@@ -354,13 +519,17 @@ export const ashbyProvider: JobProvider = {
   id: 'ashby',
   name: 'Ashby (employer boards)',
   kind: 'ats',
-  description: 'Official public job boards of employers that use Ashby. Add employers on the Sources page.',
+  description:
+    'Official public job boards of employers that use Ashby. Add employers on the Sources page.',
   markets: 'Any employer with a public Ashby board you add',
   docsUrl: 'https://developers.ashbyhq.com/docs/public-job-posting-api',
   termsNote: 'Public Job Postings API; no key needed. Each request covers one employer.',
   credentials: [],
   defaultEnabled: true,
-  rateLimit: { minIntervalMs: 300, note: 'One request per registered employer, 3 in parallel, cached 1 hour.' },
+  rateLimit: {
+    minIntervalMs: 300,
+    note: 'One request per registered employer, 3 in parallel, cached 1 hour.'
+  },
   cacheTtlMs: 60 * 60_000,
   timeoutMs: 20_000,
   hosts: ['api.ashbyhq.com'],
@@ -378,8 +547,13 @@ export const ashbyProvider: JobProvider = {
       for (const j of data.jobs.slice(0, MAX_JOBS_PER_BOARD)) {
         const p = AshbyJob.safeParse(j)
         if (!p.success || p.data.isListed === false) continue
-        if (!keywordFilter(q, p.data.title, `${p.data.department ?? ''} ${p.data.team ?? ''}`)) continue
-        out.push({ sourceJobId: p.data.id, payload: p.data, context: { board: e.boardId, company: e.name } })
+        if (!keywordFilter(q, p.data.title, `${p.data.department ?? ''} ${p.data.team ?? ''}`))
+          continue
+        out.push({
+          sourceJobId: p.data.id,
+          payload: p.data,
+          context: { board: e.boardId, company: e.name }
+        })
       }
       return out
     })
@@ -388,11 +562,27 @@ export const ashbyProvider: JobProvider = {
     const d = AshbyJob.parse(r.payload)
     const wt = (d.workplaceType ?? '').toLowerCase()
     const modes: WorkMode[] | undefined =
-      wt === 'remote' || (d.isRemote && !wt) ? ['remote'] : wt === 'hybrid' ? ['hybrid'] : wt === 'onsite' ? ['onsite'] : undefined
+      wt === 'remote' || (d.isRemote && !wt)
+        ? ['remote']
+        : wt === 'hybrid'
+          ? ['hybrid']
+          : wt === 'onsite'
+            ? ['onsite']
+            : undefined
     const pa = d.address?.postalAddress
-    const comp = d.compensation?.summaryComponents?.find((c) => /salary|hourly/i.test(c.compensationType ?? ''))
+    const comp = d.compensation?.summaryComponents?.find((c) =>
+      /salary|hourly/i.test(c.compensationType ?? '')
+    )
     const interval = (comp?.interval ?? '').toUpperCase()
-    const period: SalaryPeriod | undefined = /YEAR/.test(interval) ? 'year' : /HOUR/.test(interval) ? 'hour' : /MONTH/.test(interval) ? 'month' : /WEEK/.test(interval) ? 'week' : undefined
+    const period: SalaryPeriod | undefined = /YEAR/.test(interval)
+      ? 'year'
+      : /HOUR/.test(interval)
+        ? 'hour'
+        : /MONTH/.test(interval)
+          ? 'month'
+          : /WEEK/.test(interval)
+            ? 'week'
+            : undefined
     const country = pa?.addressCountry ? lookupCountry(pa.addressCountry) : undefined
     return {
       sourceJobId: d.id,
@@ -403,11 +593,25 @@ export const ashbyProvider: JobProvider = {
       descriptionHtml: d.descriptionHtml ?? d.descriptionPlain,
       locationText: d.location ?? '',
       extraLocations: (d.secondaryLocations ?? []).map((l) => l.location ?? '').filter(Boolean),
-      places: pa && (pa.addressLocality || country) ? [{ city: pa.addressLocality, region: pa.addressRegion, country, label: d.location }] : undefined,
+      places:
+        pa && (pa.addressLocality || country)
+          ? [{ city: pa.addressLocality, region: pa.addressRegion, country, label: d.location }]
+          : undefined,
       workModes: modes,
       remoteEligibilityText: modes?.includes('remote') ? d.location : undefined,
-      employmentTypes: d.employmentType && ASHBY_TYPES[d.employmentType] ? [ASHBY_TYPES[d.employmentType]] : undefined,
-      salary: comp && (comp.minValue || comp.maxValue) ? { min: comp.minValue ?? undefined, max: comp.maxValue ?? undefined, currency: comp.currencyCode ?? undefined, period } : undefined,
+      employmentTypes:
+        d.employmentType && ASHBY_TYPES[d.employmentType]
+          ? [ASHBY_TYPES[d.employmentType]]
+          : undefined,
+      salary:
+        comp && (comp.minValue || comp.maxValue)
+          ? {
+              min: comp.minValue ?? undefined,
+              max: comp.maxValue ?? undefined,
+              currency: comp.currencyCode ?? undefined,
+              period
+            }
+          : undefined,
       postedAt: isoFromString(d.publishedAt),
       tags: [d.department, d.team].filter(Boolean) as string[],
       employerDirect: true,
@@ -427,7 +631,10 @@ const SrPosting = z
     name: z.string(),
     refNumber: z.string().optional(),
     releasedDate: z.string().optional(),
-    company: z.object({ name: z.string().optional(), identifier: z.string().optional() }).passthrough().optional(),
+    company: z
+      .object({ name: z.string().optional(), identifier: z.string().optional() })
+      .passthrough()
+      .optional(),
     location: z
       .object({
         city: z.string().optional(),
@@ -446,7 +653,12 @@ const SrPosting = z
     department: z.object({ label: z.string().optional() }).passthrough().optional(),
     jobAd: z
       .object({
-        sections: z.record(z.string(), z.object({ title: z.string().optional(), text: z.string().optional() }).passthrough()).optional()
+        sections: z
+          .record(
+            z.string(),
+            z.object({ title: z.string().optional(), text: z.string().optional() }).passthrough()
+          )
+          .optional()
       })
       .passthrough()
       .optional(),
@@ -455,15 +667,24 @@ const SrPosting = z
   })
   .passthrough()
 
-export async function validateSmartRecruiters(http: HttpClient, company: string, signal?: AbortSignal): Promise<BoardValidation> {
+export async function validateSmartRecruiters(
+  http: HttpClient,
+  company: string,
+  signal?: AbortSignal
+): Promise<BoardValidation> {
   try {
-    const data = await http.json<{ totalFound?: number; content?: { company?: { name?: string } }[] }>({
+    const data = await http.json<{
+      totalFound?: number
+      content?: { company?: { name?: string } }[]
+    }>({
       url: `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(company)}/postings?limit=1`,
       signal,
       retries: 1
     })
-    if (typeof data?.totalFound !== 'number') return { ok: false, error: 'Unexpected SmartRecruiters response' }
-    if (data.totalFound === 0) return { ok: false, error: 'No public SmartRecruiters postings for that company identifier' }
+    if (typeof data?.totalFound !== 'number')
+      return { ok: false, error: 'Unexpected SmartRecruiters response' }
+    if (data.totalFound === 0)
+      return { ok: false, error: 'No public SmartRecruiters postings for that company identifier' }
     return { ok: true, count: data.totalFound, name: data.content?.[0]?.company?.name }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
@@ -474,13 +695,17 @@ export const smartRecruitersProvider: JobProvider = {
   id: 'smartrecruiters',
   name: 'SmartRecruiters (employer boards)',
   kind: 'ats',
-  description: 'Official public postings of employers that use SmartRecruiters (common in retail, hospitality and logistics).',
+  description:
+    'Official public postings of employers that use SmartRecruiters (common in retail, hospitality and logistics).',
   markets: 'Any employer with public SmartRecruiters postings you add',
   docsUrl: 'https://developers.smartrecruiters.com/docs/posting-api',
   termsNote: 'Public Posting API; no key needed. Details fetched for matching postings only.',
   credentials: [],
   defaultEnabled: true,
-  rateLimit: { minIntervalMs: 300, note: 'Listing + up to 25 detail requests per employer, cached 1 hour.' },
+  rateLimit: {
+    minIntervalMs: 300,
+    note: 'Listing + up to 25 detail requests per employer, cached 1 hour.'
+  },
   cacheTtlMs: 60 * 60_000,
   timeoutMs: 20_000,
   hosts: ['api.smartrecruiters.com'],
@@ -494,8 +719,13 @@ export const smartRecruitersProvider: JobProvider = {
         const params = new URLSearchParams({ limit: '100', offset: String(offset) })
         if (q.keywords) params.set('q', q.keywords)
         if (q.country && !q.wantsRemote) params.set('country', q.country.toLowerCase())
-        const data = await ctx.http.json<{ content?: unknown[]; totalFound?: number }>({ url: `${base}?${params}`, signal: ctx.signal, timeoutMs: this.timeoutMs })
-        if (!data || !Array.isArray(data.content)) throw new Error('Unexpected SmartRecruiters response shape')
+        const data = await ctx.http.json<{ content?: unknown[]; totalFound?: number }>({
+          url: `${base}?${params}`,
+          signal: ctx.signal,
+          timeoutMs: this.timeoutMs
+        })
+        if (!data || !Array.isArray(data.content))
+          throw new Error('Unexpected SmartRecruiters response shape')
         for (const item of data.content) {
           const p = SrPosting.safeParse(item)
           if (p.success) list.push(p.data)
@@ -503,15 +733,27 @@ export const smartRecruitersProvider: JobProvider = {
         if (data.content.length < 100) break
       }
       const out: RawRecord[] = []
-      const wanted = list.filter((p) => keywordFilter(q, p.name, p.department?.label ?? '')).slice(0, 25)
+      const wanted = list
+        .filter((p) => keywordFilter(q, p.name, p.department?.label ?? ''))
+        .slice(0, 25)
       for (let i = 0; i < wanted.length; i += 3) {
         const details = await Promise.allSettled(
-          wanted.slice(i, i + 3).map((p) => ctx.http.json<unknown>({ url: `${base}/${encodeURIComponent(p.id)}`, signal: ctx.signal, timeoutMs: this.timeoutMs }))
+          wanted.slice(i, i + 3).map((p) =>
+            ctx.http.json<unknown>({
+              url: `${base}/${encodeURIComponent(p.id)}`,
+              signal: ctx.signal,
+              timeoutMs: this.timeoutMs
+            })
+          )
         )
         details.forEach((d, idx) => {
           const summary = wanted[i + idx]
           const detail = d.status === 'fulfilled' ? SrPosting.safeParse(d.value) : undefined
-          out.push({ sourceJobId: summary.id, payload: detail?.success ? { ...summary, ...detail.data } : summary, context: { board: e.boardId, company: e.name } })
+          out.push({
+            sourceJobId: summary.id,
+            payload: detail?.success ? { ...summary, ...detail.data } : summary,
+            context: { board: e.boardId, company: e.name }
+          })
         })
       }
       return out
@@ -522,22 +764,44 @@ export const smartRecruitersProvider: JobProvider = {
     const board = String(r.context?.board)
     const sections = d.jobAd?.sections ?? {}
     const html = ['companyDescription', 'jobDescription', 'qualifications', 'additionalInformation']
-      .map((k) => (sections[k]?.text ? `<h3>${sections[k]?.title ?? ''}</h3>${sections[k]?.text}` : ''))
+      .map((k) =>
+        sections[k]?.text ? `<h3>${sections[k]?.title ?? ''}</h3>${sections[k]?.text}` : ''
+      )
       .join('')
     const loc = d.location
     const lat = num(loc?.latitude)
     const lon = loc?.longitude !== undefined ? Number(loc.longitude) : undefined
-    const modes: WorkMode[] | undefined = loc?.remote ? ['remote'] : loc?.hybrid ? ['hybrid'] : loc ? ['onsite'] : undefined
+    const modes: WorkMode[] | undefined = loc?.remote
+      ? ['remote']
+      : loc?.hybrid
+        ? ['hybrid']
+        : loc
+          ? ['onsite']
+          : undefined
     const cc = loc?.country?.toUpperCase()
     return {
       sourceJobId: d.id,
-      sourceUrl: d.postingUrl ?? `https://jobs.smartrecruiters.com/${encodeURIComponent(board)}/${d.id}`,
-      applyUrl: d.applyUrl ?? `https://jobs.smartrecruiters.com/${encodeURIComponent(board)}/${d.id}`,
+      sourceUrl:
+        d.postingUrl ?? `https://jobs.smartrecruiters.com/${encodeURIComponent(board)}/${d.id}`,
+      applyUrl:
+        d.applyUrl ?? `https://jobs.smartrecruiters.com/${encodeURIComponent(board)}/${d.id}`,
       title: d.name,
       company: d.company?.name ?? String(r.context?.company ?? board),
       descriptionHtml: html || undefined,
       locationText: loc?.fullLocation ?? [loc?.city, loc?.region, cc].filter(Boolean).join(', '),
-      places: loc ? [{ city: loc.city, region: loc.region, country: cc, coordinates: lat !== undefined && lon !== undefined && Number.isFinite(lon) ? { lat, lon } : undefined }] : undefined,
+      places: loc
+        ? [
+            {
+              city: loc.city,
+              region: loc.region,
+              country: cc,
+              coordinates:
+                lat !== undefined && lon !== undefined && Number.isFinite(lon)
+                  ? { lat, lon }
+                  : undefined
+            }
+          ]
+        : undefined,
       workModes: modes,
       remoteEligibilityText: loc?.remote ? cc : undefined,
       employmentTypeText: d.typeOfEmployment?.label,
@@ -550,7 +814,12 @@ export const smartRecruitersProvider: JobProvider = {
   }
 }
 
-export async function validateBoard(http: HttpClient, provider: AtsProvider, board: string, signal?: AbortSignal): Promise<BoardValidation> {
+export async function validateBoard(
+  http: HttpClient,
+  provider: AtsProvider,
+  board: string,
+  signal?: AbortSignal
+): Promise<BoardValidation> {
   switch (provider) {
     case 'greenhouse':
       return validateGreenhouse(http, board, signal)

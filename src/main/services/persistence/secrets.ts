@@ -67,7 +67,12 @@ export class SecretStore {
     this.db.run(
       `INSERT INTO secrets (key, value, encrypted, updated_at) VALUES (?, ?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, encrypted = excluded.encrypted, updated_at = excluded.updated_at`,
-      [key, encrypted ? this.cipher.encrypt(trimmed) : trimmed, encrypted ? 1 : 0, new Date().toISOString()]
+      [
+        key,
+        encrypted ? this.cipher.encrypt(trimmed) : trimmed,
+        encrypted ? 1 : 0,
+        new Date().toISOString()
+      ]
     )
   }
 

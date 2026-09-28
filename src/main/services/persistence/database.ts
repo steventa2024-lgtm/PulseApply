@@ -46,11 +46,15 @@ export class AppDb {
   }
 
   get schemaVersion(): number {
-    return (this.get<{ v: number }>('SELECT MAX(version) AS v FROM schema_version')?.v as number) ?? 0
+    return (
+      (this.get<{ v: number }>('SELECT MAX(version) AS v FROM schema_version')?.v as number) ?? 0
+    )
   }
 
   private migrate(): void {
-    this.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)')
+    this.exec(
+      'CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)'
+    )
     const current = this.schemaVersion
     for (const m of MIGRATIONS) {
       if (m.version <= current) continue

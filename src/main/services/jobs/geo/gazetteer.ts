@@ -39,8 +39,22 @@ const CITY_ALIASES: Record<string, string> = {
 
 /** Places missing from the population-based dataset but common in job postings. */
 const EXTRA_PLACES: City[] = [
-  { name: 'Washington D.C.', country: 'US', admin1: 'DC', lat: 38.8951, lon: -77.0364, population: 689545 },
-  { name: 'Washington', country: 'US', admin1: 'DC', lat: 38.8951, lon: -77.0364, population: 689545 }
+  {
+    name: 'Washington D.C.',
+    country: 'US',
+    admin1: 'DC',
+    lat: 38.8951,
+    lon: -77.0364,
+    population: 689545
+  },
+  {
+    name: 'Washington',
+    country: 'US',
+    admin1: 'DC',
+    lat: 38.8951,
+    lon: -77.0364,
+    population: 689545
+  }
 ]
 
 export class Gazetteer {
@@ -49,13 +63,21 @@ export class Gazetteer {
   readonly size: number
 
   constructor(resourcesDir: string) {
-    const cities = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(resourcesDir, 'geo', 'cities.json.gz'))).toString('utf8'))
+    const cities = JSON.parse(
+      zlib
+        .gunzipSync(fs.readFileSync(path.join(resourcesDir, 'geo', 'cities.json.gz')))
+        .toString('utf8')
+    )
     for (const r of cities.rows as [string, string, string, string, number, number, number][]) {
       this.add({ name: r[0], country: r[2], admin1: r[3], lat: r[4], lon: r[5], population: r[6] })
     }
     for (const c of EXTRA_PLACES) this.add(c)
     this.size = cities.rows.length
-    const zips = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(resourcesDir, 'geo', 'us-zips.json.gz'))).toString('utf8'))
+    const zips = JSON.parse(
+      zlib
+        .gunzipSync(fs.readFileSync(path.join(resourcesDir, 'geo', 'us-zips.json.gz')))
+        .toString('utf8')
+    )
     this.zips = zips.zips
   }
 
@@ -115,14 +137,31 @@ export class Gazetteer {
    */
   resolve(text: string): ResolvedPlace {
     const raw = text.trim()
-    const unresolved: ResolvedPlace = { label: raw, precision: 'none', resolution: 'unresolved', confidence: 0 }
+    const unresolved: ResolvedPlace = {
+      label: raw,
+      precision: 'none',
+      resolution: 'unresolved',
+      confidence: 0
+    }
     if (!raw) return unresolved
 
     const zipMatch = /\b(\d{5})(?:-\d{4})?\b/.exec(raw)
-    if (zipMatch && (/\b(US|USA|United States)\b/i.test(raw) || /^\s*\d{5}(-\d{4})?\s*$/.test(raw) || /,\s*[A-Z]{2}\s+\d{5}/.test(raw))) {
+    if (
+      zipMatch &&
+      (/\b(US|USA|United States)\b/i.test(raw) ||
+        /^\s*\d{5}(-\d{4})?\s*$/.test(raw) ||
+        /,\s*[A-Z]{2}\s+\d{5}/.test(raw))
+    ) {
       const p = this.zip(zipMatch[1])
       if (p) {
-        return { label: raw, country: 'US', coordinates: p, precision: 'postal', resolution: 'postal', confidence: 0.9 }
+        return {
+          label: raw,
+          country: 'US',
+          coordinates: p,
+          precision: 'postal',
+          resolution: 'postal',
+          confidence: 0.9
+        }
       }
     }
 
@@ -153,10 +192,24 @@ export class Gazetteer {
       if (!CITY_ALIASES[key]) {
         const region = lookupRegion(parts[0]).find((r) => normalizePlace(r.name) === key)
         if (region) {
-          return { label: region.name, region: regionName(region.country, region.admin1) ?? region.name, country: region.country, precision: 'region', resolution: 'gazetteer', confidence: 0.85 }
+          return {
+            label: region.name,
+            region: regionName(region.country, region.admin1) ?? region.name,
+            country: region.country,
+            precision: 'region',
+            resolution: 'gazetteer',
+            confidence: 0.85
+          }
         }
         const cc = lookupCountry(parts[0], false)
-        if (cc) return { label: countryName(cc) ?? raw, country: cc, precision: 'country', resolution: 'gazetteer', confidence: 0.9 }
+        if (cc)
+          return {
+            label: countryName(cc) ?? raw,
+            country: cc,
+            precision: 'country',
+            resolution: 'gazetteer',
+            confidence: 0.9
+          }
       }
       // "Sydney NSW", "Austin TX", "Leeds United Kingdom": try trailing words as qualifiers.
       const words = parts[0].split(' ')
@@ -172,17 +225,26 @@ export class Gazetteer {
     const prev = n >= 2 ? parts[n - 2] : undefined
     const lastCountry = lookupCountry(last, true)
     const lastRegions = lookupRegion(last)
-    const regionInterps: Interp[] = lastRegions.map((r) => ({ country: r.country, admin1: r.admin1, cityParts: parts.slice(0, n - 1) }))
+    const regionInterps: Interp[] = lastRegions.map((r) => ({
+      country: r.country,
+      admin1: r.admin1,
+      cityParts: parts.slice(0, n - 1)
+    }))
     const countryInterps: Interp[] = []
     if (lastCountry) {
       if (prev) {
         for (const r of lookupRegion(prev).filter((r) => r.country === lastCountry)) {
-          countryInterps.push({ country: lastCountry, admin1: r.admin1, cityParts: parts.slice(0, n - 2) })
+          countryInterps.push({
+            country: lastCountry,
+            admin1: r.admin1,
+            cityParts: parts.slice(0, n - 2)
+          })
         }
       }
       countryInterps.push({ country: lastCountry, cityParts: parts.slice(0, n - 1) })
     }
-    const stateCodeFirst = /^[A-Z]{2}$/.test(last) && lastRegions.some((r) => r.country === 'US') && n === 2
+    const stateCodeFirst =
+      /^[A-Z]{2}$/.test(last) && lastRegions.some((r) => r.country === 'US') && n === 2
     const interps: Interp[] = stateCodeFirst
       ? [...regionInterps, ...countryInterps]
       : [...countryInterps, ...regionInterps]
@@ -209,7 +271,9 @@ export class Gazetteer {
     }
 
     // No city: fall back to the coarsest reliable reading.
-    const coarse = interps.find((it) => it.admin1 && it.cityParts.length === 0) ?? interps.find((it) => it.admin1)
+    const coarse =
+      interps.find((it) => it.admin1 && it.cityParts.length === 0) ??
+      interps.find((it) => it.admin1)
     const lone = n === 1
     if (coarse?.admin1 && coarse.country && (lone || coarse.cityParts.length === 0)) {
       return {
@@ -231,7 +295,14 @@ export class Gazetteer {
       }
     }
     if (coarse?.admin1 && coarse.country) {
-      return { label: raw, region: regionName(coarse.country, coarse.admin1) ?? coarse.admin1, country: coarse.country, precision: 'region', resolution: 'gazetteer', confidence: 0.6 }
+      return {
+        label: raw,
+        region: regionName(coarse.country, coarse.admin1) ?? coarse.admin1,
+        country: coarse.country,
+        precision: 'region',
+        resolution: 'gazetteer',
+        confidence: 0.6
+      }
     }
     return unresolved
   }
@@ -239,7 +310,8 @@ export class Gazetteer {
 
 export function formatPlace(c: City): string {
   const region = regionName(c.country, c.admin1)
-  if (c.country === 'US' || c.country === 'CA' || c.country === 'AU') return `${c.name}, ${region ?? c.admin1}${c.country === 'US' ? '' : ', ' + (countryName(c.country) ?? c.country)}`
+  if (c.country === 'US' || c.country === 'CA' || c.country === 'AU')
+    return `${c.name}, ${region ?? c.admin1}${c.country === 'US' ? '' : ', ' + (countryName(c.country) ?? c.country)}`
   return `${c.name}, ${countryName(c.country) ?? c.country}`
 }
 

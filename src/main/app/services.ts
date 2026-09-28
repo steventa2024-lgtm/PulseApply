@@ -62,15 +62,25 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
   const store = await openStore(opts.inMemory ? null : dbPath, opts.cipher)
   store.searches.abandonDanglingRuns()
   const migration = importLegacyDatabase(store, opts.userDataDir)
-  if (migration?.performed) log.info('startup', `Legacy import: ${JSON.stringify(migration.imported)}`)
+  if (migration?.performed)
+    log.info('startup', `Legacy import: ${JSON.stringify(migration.imported)}`)
 
-  const http = new HttpClient({ userAgent: `PulseApply/${opts.appVersion} (desktop job-search assistant)`, fetchImpl: opts.fetchImpl })
+  const http = new HttpClient({
+    userAgent: `PulseApply/${opts.appVersion} (desktop job-search assistant)`,
+    fetchImpl: opts.fetchImpl
+  })
   http.setHostInterval('nominatim.openstreetmap.org', 1100)
   const gazetteer = new Gazetteer(opts.resourcesDir)
   const geo = new GeoService(gazetteer, store.db, http, () => store.settings.get().onlineGeocoding)
   const embeddings = new EmbeddingService(store.db, http, () => store.settings.get().ollama)
   const matching = new MatchingService(store, geo, embeddings)
-  const search = new SearchService({ store, geo, http, providers: opts.providers ?? ALL_PROVIDERS, matching })
+  const search = new SearchService({
+    store,
+    geo,
+    http,
+    providers: opts.providers ?? ALL_PROVIDERS,
+    matching
+  })
   const employers = new EmployerService(store, http)
   const resumesDir = path.join(opts.userDataDir, 'resumes')
   const resumes = new ResumeService(store, resumesDir, gazetteer)
@@ -78,7 +88,10 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
     opts.browserOptions ??
       (() => {
         const b = store.settings.get().browser
-        return { executablePath: b.executablePath || process.env.PULSEAPPLY_CHROMIUM_PATH, channel: b.channel }
+        return {
+          executablePath: b.executablePath || process.env.PULSEAPPLY_CHROMIUM_PATH,
+          channel: b.channel
+        }
       })
   )
   const applications = new ApplicationManager({
@@ -96,7 +109,12 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
     pollTimeoutSec: opts.telegramPollTimeoutSec,
     conflictBackoffMs: opts.telegramConflictBackoffMs
   })
-  const scheduler = new Scheduler({ store, search, telegram, onUpdate: () => opts.emit('scheduler:updated', null) })
+  const scheduler = new Scheduler({
+    store,
+    search,
+    telegram,
+    onUpdate: () => opts.emit('scheduler:updated', null)
+  })
 
   let shuttingDown: Promise<void> | null = null
 
@@ -112,7 +130,12 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
     applications,
     telegram,
     scheduler,
-    paths: { userData: opts.userDataDir, db: dbPath, resumes: resumesDir, resources: opts.resourcesDir },
+    paths: {
+      userData: opts.userDataDir,
+      db: dbPath,
+      resumes: resumesDir,
+      resources: opts.resourcesDir
+    },
     async dashboard(): Promise<DashboardStats> {
       const settings = store.settings.get()
       const since = new Date(Date.now() - 24 * 3600_000).toISOString()
@@ -130,7 +153,8 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
         unverifiedSubmissions: counts.SUBMISSION_UNVERIFIED ?? 0,
         lastSuccessfulSearchAt: store.searches.lastSuccessfulRunAt(),
         providersConnected: infos.filter((i) => i.status === 'CONNECTED').length,
-        providersNeedingCredentials: infos.filter((i) => i.status === 'REQUIRES_CREDENTIALS').length,
+        providersNeedingCredentials: infos.filter((i) => i.status === 'REQUIRES_CREDENTIALS')
+          .length,
         scheduledSearches: store.searches.list().filter((x) => x.enabled).length,
         telegram: telegram.status().state
       }

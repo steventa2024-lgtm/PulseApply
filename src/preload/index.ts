@@ -12,12 +12,13 @@ const eventsAllowed = new Set<string>(EVENT_CHANNELS)
 
 const bridge = {
   invoke(channel: string, payload?: unknown): Promise<IpcEnvelope<unknown>> {
-    if (!invokeAllowed.has(channel)) return Promise.resolve({ ok: false, error: `Channel not allowed: ${channel}` })
+    if (!invokeAllowed.has(channel))
+      return Promise.resolve({ ok: false, error: `Channel not allowed: ${channel}` })
     return ipcRenderer.invoke(channel, payload)
   },
   on(channel: string, callback: (payload: unknown) => void): () => void {
     if (!eventsAllowed.has(channel)) return () => undefined
-    const listener = (_: Electron.IpcRendererEvent, payload: unknown) => callback(payload)
+    const listener = (_: Electron.IpcRendererEvent, payload: unknown): void => callback(payload)
     ipcRenderer.on(channel, listener)
     return () => ipcRenderer.removeListener(channel, listener)
   },

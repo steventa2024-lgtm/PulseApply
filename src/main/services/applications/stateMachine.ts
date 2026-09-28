@@ -15,7 +15,13 @@ const TRANSITIONS: Record<ApplicationState, ApplicationState[]> = {
   SAVED: ['QUEUED', 'OPENING', 'CANCELLED'],
   QUEUED: ['OPENING', 'CANCELLED'],
   OPENING: ['AUTOFILLING', 'NEEDS_USER_INPUT', 'MANUAL_COMPLETION_REQUIRED', 'FAILED', 'CANCELLED'],
-  AUTOFILLING: ['NEEDS_USER_INPUT', 'READY_FOR_REVIEW', 'MANUAL_COMPLETION_REQUIRED', 'FAILED', 'CANCELLED'],
+  AUTOFILLING: [
+    'NEEDS_USER_INPUT',
+    'READY_FOR_REVIEW',
+    'MANUAL_COMPLETION_REQUIRED',
+    'FAILED',
+    'CANCELLED'
+  ],
   NEEDS_USER_INPUT: [
     'AUTOFILLING',
     'READY_FOR_REVIEW',
@@ -40,7 +46,13 @@ const TRANSITIONS: Record<ApplicationState, ApplicationState[]> = {
   SUBMISSION_UNVERIFIED: ['SUBMITTED'],
   FAILED: ['OPENING', 'CANCELLED'],
   CANCELLED: [],
-  MANUAL_COMPLETION_REQUIRED: ['AUTOFILLING', 'SUBMITTED', 'SUBMISSION_UNVERIFIED', 'CANCELLED', 'FAILED']
+  MANUAL_COMPLETION_REQUIRED: [
+    'AUTOFILLING',
+    'SUBMITTED',
+    'SUBMISSION_UNVERIFIED',
+    'CANCELLED',
+    'FAILED'
+  ]
 }
 
 export const ACTIVE_STATES: ApplicationState[] = [
@@ -55,7 +67,11 @@ export const ACTIVE_STATES: ApplicationState[] = [
 ]
 
 /** States after which starting a new application for the same job is refused. */
-export const BLOCKS_NEW_APPLICATION: ApplicationState[] = [...ACTIVE_STATES, 'SUBMITTED', 'SUBMISSION_UNVERIFIED']
+export const BLOCKS_NEW_APPLICATION: ApplicationState[] = [
+  ...ACTIVE_STATES,
+  'SUBMITTED',
+  'SUBMISSION_UNVERIFIED'
+]
 
 export function canTransition(from: ApplicationState, to: ApplicationState): boolean {
   return TRANSITIONS[from]?.includes(to) ?? false

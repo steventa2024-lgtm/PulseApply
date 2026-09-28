@@ -1,6 +1,14 @@
 import { createHash } from 'crypto'
 import { z } from 'zod'
-import type { EmploymentType, NormalizedJob, ResolvedPlace, Salary, Seniority, VerificationStatus, WorkMode } from '../../../../shared/types'
+import type {
+  EmploymentType,
+  NormalizedJob,
+  ResolvedPlace,
+  Salary,
+  Seniority,
+  VerificationStatus,
+  WorkMode
+} from '../../../../shared/types'
 import type { DraftJob } from '../providers/types'
 import type { GeoService } from '../geo/geoService'
 import { isHybridText, isRemoteText, parseRemoteEligibility } from '../geo/geoService'
@@ -33,7 +41,15 @@ export const NormalizedJobSchema = z.object({
   company: z.string().min(1),
   description: z.string(),
   workModes: z.array(z.enum(['onsite', 'hybrid', 'remote'])).min(1),
-  verificationStatus: z.enum(['SOURCE_CONFIRMED', 'EMPLOYER_CONFIRMED', 'UNVERIFIED', 'STALE', 'EXPIRED', 'REMOVED', 'VERIFICATION_FAILED']),
+  verificationStatus: z.enum([
+    'SOURCE_CONFIRMED',
+    'EMPLOYER_CONFIRMED',
+    'UNVERIFIED',
+    'STALE',
+    'EXPIRED',
+    'REMOVED',
+    'VERIFICATION_FAILED'
+  ]),
   sources: z.array(z.object({ providerId: z.string(), sourceUrl: z.string().url() })).min(1)
 })
 
@@ -62,7 +78,8 @@ export function parseSeniority(title: string, extra = ''): Seniority | undefined
   if (/\b(manager)\b/.test(t)) return 'manager'
   if (/\b(senior|sr\.?|iii|iv)\b/.test(t)) return 'senior'
   if (/\b(junior|jr)\b/.test(t)) return 'junior'
-  if (/\b(entry[- ]level|graduate|new grad|trainee|apprentice|intern|no experience)\b/.test(t)) return 'entry'
+  if (/\b(entry[- ]level|graduate|new grad|trainee|apprentice|intern|no experience)\b/.test(t))
+    return 'entry'
   if (/\b(mid[- ]level|intermediate|ii)\b/.test(t)) return 'mid'
   return undefined
 }
@@ -74,11 +91,15 @@ const SCHEDULE_PATTERNS: [RegExp, string][] = [
   [/\b(weekend shift|weekends required|saturday and sunday|weekend availability)\b/i, 'weekend']
 ]
 
-const YEARS_RE = /(\d{1,2})\s*\+?\s*(?:-\s*\d{1,2}\s*)?(?:years?|yrs?)(?:'|’)?\s+(?:of\s+)?(?:relevant\s+|related\s+|professional\s+|work\s+|hands-on\s+|industry\s+)?(?:experience|exp\b)/i
+const YEARS_RE =
+  /(\d{1,2})\s*\+?\s*(?:-\s*\d{1,2}\s*)?(?:years?|yrs?)(?:'|’)?\s+(?:of\s+)?(?:relevant\s+|related\s+|professional\s+|work\s+|hands-on\s+|industry\s+)?(?:experience|exp\b)/i
 
-const STRONG_REMOTE_RE = /\b(fully remote|100% remote|remote[- ]first|remote position|remote role|this is a remote|work from home position|work from anywhere)\b/i
-const STRONG_HYBRID_RE = /\b(hybrid (work|role|position|schedule|model)|\d days? (a|per) week in (the )?office|in[- ]office \d days)\b/i
-const PAY_LINE_RE = /\b(pay|salary|compensation|wage|rate|hourly|per hour|base pay|pay range|salary range|starting at|earn)\b/i
+const STRONG_REMOTE_RE =
+  /\b(fully remote|100% remote|remote[- ]first|remote position|remote role|this is a remote|work from home position|work from anywhere)\b/i
+const STRONG_HYBRID_RE =
+  /\b(hybrid (work|role|position|schedule|model)|\d days? (a|per) week in (the )?office|in[- ]office \d days)\b/i
+const PAY_LINE_RE =
+  /\b(pay|salary|compensation|wage|rate|hourly|per hour|base pay|pay range|salary range|starting at|earn)\b/i
 
 function hash(s: string, len = 20): string {
   return createHash('sha256').update(s).digest('hex').slice(0, len)
@@ -124,7 +145,9 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
 
   const title = cleanInline(draft.title, 300)
   const company = cleanInline(draft.company, 200)
-  const description = draft.descriptionText ? htmlToText(draft.descriptionText.replace(/\n/g, '<br>')) : htmlToText(draft.descriptionHtml)
+  const description = draft.descriptionText
+    ? htmlToText(draft.descriptionText.replace(/\n/g, '<br>'))
+    : htmlToText(draft.descriptionHtml)
   const sections = splitSections(description)
   const sourceUrl = canonicalizeUrl(draft.sourceUrl)!
   let applyUrl = draft.applyUrl ? canonicalizeUrl(draft.applyUrl) : undefined
@@ -134,7 +157,7 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
   }
 
   // ---- work mode ---------------------------------------------------------
-  let workModes: WorkMode[] = draft.workModes?.length ? [...new Set(draft.workModes)] : []
+  const workModes: WorkMode[] = draft.workModes?.length ? [...new Set(draft.workModes)] : []
   const locBlob = [draft.locationText, ...(draft.extraLocations ?? [])].join(' | ')
   if (!workModes.length) {
     if (isRemoteText(`${title} ${locBlob}`)) workModes.push('remote')
@@ -165,13 +188,34 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
   }
   if (locations.length === 0 || locations.every((l) => !l.coordinates)) {
     for (const part of splitLocations(locBlob)) {
-      const physical = part.replace(/\b(remote|hybrid|on[- ]?site|work from home|wfh|anywhere|worldwide|in[- ]office)\b/gi, ' ').replace(/^[\s,()\-–:]+|[\s,()\-–:]+$/g, '').trim()
+      const physical = part
+        .replace(
+          /\b(remote|hybrid|on[- ]?site|work from home|wfh|anywhere|worldwide|in[- ]office)\b/gi,
+          ' '
+        )
+        .replace(/^[\s,()\-–:]+|[\s,()\-–:]+$/g, '')
+        .trim()
       if (!physical) continue
       const place = opts.geo.resolveOffline(physical)
       if (place.precision === 'none') continue
-      if (place.coordinates && locations.some((l) => l.coordinates && Math.abs(l.coordinates.lat - place.coordinates!.lat) < 0.01 && Math.abs(l.coordinates.lon - place.coordinates!.lon) < 0.01)) continue
+      if (
+        place.coordinates &&
+        locations.some(
+          (l) =>
+            l.coordinates &&
+            Math.abs(l.coordinates.lat - place.coordinates!.lat) < 0.01 &&
+            Math.abs(l.coordinates.lon - place.coordinates!.lon) < 0.01
+        )
+      )
+        continue
       // Enrich a provider place that lacked coordinates instead of duplicating it.
-      const same = locations.find((l) => !l.coordinates && l.city && place.city && l.city.toLowerCase() === place.city.toLowerCase())
+      const same = locations.find(
+        (l) =>
+          !l.coordinates &&
+          l.city &&
+          place.city &&
+          l.city.toLowerCase() === place.city.toLowerCase()
+      )
       if (same) {
         same.coordinates = place.coordinates
         same.precision = place.precision
@@ -182,7 +226,12 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
       inferred.add('locations')
     }
   }
-  if (draft.countryHint && locations.length === 0 && !workModes.includes('remote') && draft.locationText) {
+  if (
+    draft.countryHint &&
+    locations.length === 0 &&
+    !workModes.includes('remote') &&
+    draft.locationText
+  ) {
     notes.push('Location text could not be resolved to a place.')
   }
 
@@ -195,12 +244,16 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
   // ---- employment type / seniority / schedule --------------------------------
   let employmentTypes = draft.employmentTypes?.length ? [...new Set(draft.employmentTypes)] : []
   if (!employmentTypes.length) {
-    employmentTypes = parseEmploymentTypes(`${draft.employmentTypeText ?? ''} ${title} ${description.slice(0, 1500)}`)
+    employmentTypes = parseEmploymentTypes(
+      `${draft.employmentTypeText ?? ''} ${title} ${description.slice(0, 1500)}`
+    )
     if (employmentTypes.length) inferred.add('employmentTypes')
   }
   const seniority = parseSeniority(title, draft.seniorityText)
   if (seniority && !draft.seniorityText) inferred.add('seniority')
-  const schedule = SCHEDULE_PATTERNS.filter(([re]) => re.test(`${title}\n${description.slice(0, 4000)}`)).map(([, s]) => s)
+  const schedule = SCHEDULE_PATTERNS.filter(([re]) =>
+    re.test(`${title}\n${description.slice(0, 4000)}`)
+  ).map(([, s]) => s)
 
   // ---- salary --------------------------------------------------------------
   let salary: Salary | undefined
@@ -213,7 +266,9 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
     salary = parseSalaryText(draft.salaryText)
   }
   if (!salary && !salaryEstimateDiscarded) {
-    const line = description.split('\n').find((l) => PAY_LINE_RE.test(l) && /[$€£₹]|\b(USD|EUR|GBP|CAD|AUD)\b/.test(l))
+    const line = description
+      .split('\n')
+      .find((l) => PAY_LINE_RE.test(l) && /[$€£₹]|\b(USD|EUR|GBP|CAD|AUD)\b/.test(l))
     const fromText = line ? parseSalaryText(line) : undefined
     if (fromText) {
       salary = fromText
@@ -227,12 +282,17 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
   const reqText = sections.required.length ? sections.required.join('\n') : description
   const prefText = sections.preferred.join('\n')
   const preferredSkills = prefText ? findSkills(prefText) : []
-  const requiredSkills = [...new Set([...findSkills(`${title}\n${reqText}`), ...(tagText ? findSkills(tagText, { strict: false }) : [])])].filter(
-    (s) => !preferredSkills.includes(s) || findSkills(reqText).includes(s)
-  )
+  const requiredSkills = [
+    ...new Set([
+      ...findSkills(`${title}\n${reqText}`),
+      ...(tagText ? findSkills(tagText, { strict: false }) : [])
+    ])
+  ].filter((s) => !preferredSkills.includes(s) || findSkills(reqText).includes(s))
   const certRequired = findCertifications(reqText)
   const certPreferred = prefText ? findCertifications(prefText) : []
-  const requiredCertifications = certRequired.filter((c) => !certPreferred.includes(c) || sections.required.length === 0)
+  const requiredCertifications = certRequired.filter(
+    (c) => !certPreferred.includes(c) || sections.required.length === 0
+  )
   const yearsMatch = YEARS_RE.exec(reqText)
   const minYearsExperience = yearsMatch ? Math.min(Number(yearsMatch[1]), 30) : undefined
   inferred.add('requiredSkills')
@@ -241,17 +301,23 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
   const occupation = classifyJob(title, description)
 
   // ---- identity ------------------------------------------------------------
-  const ats: DraftJob['ats'] = draft.ats ?? (() => {
-    const ref = detectAtsFromUrl(applyUrl) ?? detectAtsFromUrl(sourceUrl)
-    return ref?.postingId ? { provider: ref.provider, board: ref.board, postingId: ref.postingId } : undefined
-  })()
+  const ats: DraftJob['ats'] =
+    draft.ats ??
+    (() => {
+      const ref = detectAtsFromUrl(applyUrl) ?? detectAtsFromUrl(sourceUrl)
+      return ref?.postingId
+        ? { provider: ref.provider, board: ref.board, postingId: ref.postingId }
+        : undefined
+    })()
   const canonicalKey = ats?.postingId
     ? `ats:${ats.provider}:${(ats.board ?? '').toLowerCase()}:${ats.postingId}`
     : `src:${opts.providerId}:${draft.sourceJobId}`
   const id = hash(canonicalKey)
 
   // ---- verification --------------------------------------------------------
-  let verificationStatus: VerificationStatus = draft.employerDirect ? 'EMPLOYER_CONFIRMED' : 'SOURCE_CONFIRMED'
+  let verificationStatus: VerificationStatus = draft.employerDirect
+    ? 'EMPLOYER_CONFIRMED'
+    : 'SOURCE_CONFIRMED'
   const verificationNotes = [
     draft.employerDirect
       ? `Currently published on the employer's own job board (${opts.providerName}).`
@@ -260,9 +326,15 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
   if (draft.expiresAt && draft.expiresAt < nowIso) {
     verificationStatus = 'EXPIRED'
     verificationNotes.push(`Listing expired on ${draft.expiresAt.slice(0, 10)}.`)
-  } else if (!draft.employerDirect && draft.postedAt && Date.parse(draft.postedAt) < now.getTime() - (opts.staleAfterDays ?? 60) * 86400_000) {
+  } else if (
+    !draft.employerDirect &&
+    draft.postedAt &&
+    Date.parse(draft.postedAt) < now.getTime() - (opts.staleAfterDays ?? 60) * 86400_000
+  ) {
     verificationStatus = 'STALE'
-    verificationNotes.push(`Posted ${draft.postedAt.slice(0, 10)}; older postings are often filled.`)
+    verificationNotes.push(
+      `Posted ${draft.postedAt.slice(0, 10)}; older postings are often filled.`
+    )
   }
   verificationNotes.push(...notes)
 
@@ -289,7 +361,10 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
     title,
     normalizedTitle: normalizeTitle(title).trim(),
     company,
-    companyWebsite: draft.companyWebsite && isPublicHttpUrl(draft.companyWebsite) ? draft.companyWebsite : undefined,
+    companyWebsite:
+      draft.companyWebsite && isPublicHttpUrl(draft.companyWebsite)
+        ? draft.companyWebsite
+        : undefined,
     description,
     responsibilities: sections.responsibilities.slice(0, 30),
     qualifications: sections.required.slice(0, 30),
@@ -313,7 +388,14 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
     verificationStatus,
     verificationNotes,
     scamSignals: signals,
-    ats: ats ? { provider: ats.provider, board: ats.board, requisitionId: ats.requisitionId, postingId: ats.postingId } : undefined,
+    ats: ats
+      ? {
+          provider: ats.provider,
+          board: ats.board,
+          requisitionId: ats.requisitionId,
+          postingId: ats.postingId
+        }
+      : undefined,
     occupation,
     inferredFields: [...inferred],
     sources: [
@@ -330,6 +412,7 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
     applicationSupport: applicationSupportFor(applyUrl, sourceUrl)
   }
   const check = NormalizedJobSchema.safeParse(job)
-  if (!check.success) return { error: check.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') }
+  if (!check.success)
+    return { error: check.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') }
   return { job }
 }

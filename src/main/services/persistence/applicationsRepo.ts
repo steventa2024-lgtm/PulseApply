@@ -9,7 +9,11 @@ import type {
 } from '../../../shared/types'
 import type { AppDb } from './database'
 import { json } from './database'
-import { BLOCKS_NEW_APPLICATION, canTransition, InvalidTransitionError } from '../applications/stateMachine'
+import {
+  BLOCKS_NEW_APPLICATION,
+  canTransition,
+  InvalidTransitionError
+} from '../applications/stateMachine'
 
 interface AppRow {
   id: string
@@ -106,7 +110,10 @@ export class ApplicationsRepo {
   }
 
   latestForJob(jobId: string): ApplicationRecord | undefined {
-    const row = this.db.get<AppRow>(`${SELECT} WHERE a.job_id = ? ORDER BY a.created_at DESC LIMIT 1`, [jobId])
+    const row = this.db.get<AppRow>(
+      `${SELECT} WHERE a.job_id = ? ORDER BY a.created_at DESC LIMIT 1`,
+      [jobId]
+    )
     return row ? this.hydrate(row) : undefined
   }
 
@@ -166,7 +173,12 @@ export class ApplicationsRepo {
     id: string,
     to: ApplicationState,
     message: string,
-    patch: Partial<Pick<ApplicationRecord, 'filledFields' | 'issues' | 'blockers' | 'currentUrl' | 'error' | 'adapter'>> & {
+    patch: Partial<
+      Pick<
+        ApplicationRecord,
+        'filledFields' | 'issues' | 'blockers' | 'currentUrl' | 'error' | 'adapter'
+      >
+    > & {
       addEvidence?: SubmissionEvidence[]
     } = {}
   ): ApplicationRecord {
@@ -193,7 +205,11 @@ export class ApplicationsRepo {
           to,
           JSON.stringify(data),
           patch.currentUrl ?? null,
-          'error' in patch ? (patch.error ?? null) : to === 'FAILED' ? current.error ?? null : null,
+          'error' in patch
+            ? (patch.error ?? null)
+            : to === 'FAILED'
+              ? (current.error ?? null)
+              : null,
           patch.adapter ?? null,
           now,
           to,
@@ -215,10 +231,14 @@ export class ApplicationsRepo {
 
   events(id: string): ApplicationEvent[] {
     return this.db
-      .all<{ id: number; application_id: string; at: string; from_state: string | null; to_state: string; message: string }>(
-        'SELECT * FROM application_events WHERE application_id = ? ORDER BY id ASC',
-        [id]
-      )
+      .all<{
+        id: number
+        application_id: string
+        at: string
+        from_state: string | null
+        to_state: string
+        message: string
+      }>('SELECT * FROM application_events WHERE application_id = ? ORDER BY id ASC', [id])
       .map((e) => ({
         id: e.id,
         applicationId: e.application_id,

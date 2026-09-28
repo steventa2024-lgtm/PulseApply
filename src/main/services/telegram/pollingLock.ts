@@ -53,11 +53,17 @@ export class PollingLock {
   acquire(): string | null {
     const reg = registry()
     const inProc = reg.get(this.tokenKey)
-    if (inProc && inProc !== this.owner) return 'Another Telegram poller is already running inside PulseApply.'
+    if (inProc && inProc !== this.owner)
+      return 'Another Telegram poller is already running inside PulseApply.'
     try {
       const existing = JSON.parse(fs.readFileSync(this.file, 'utf8')) as LockBody
       const fresh = Date.now() - existing.heartbeatAt < STALE_AFTER_MS
-      if (existing.owner !== this.owner && existing.pid !== process.pid && fresh && alive(existing.pid)) {
+      if (
+        existing.owner !== this.owner &&
+        existing.pid !== process.pid &&
+        fresh &&
+        alive(existing.pid)
+      ) {
         return `Another PulseApply process (pid ${existing.pid}) is already polling this bot.`
       }
     } catch {

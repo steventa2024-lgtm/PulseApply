@@ -1,6 +1,11 @@
 import type { CandidateProfile, ResolvedPlace, Seniority } from '../../../shared/types'
 import { classifyJob, classifyQuery } from '../jobs/search/classify'
-import { canonicalizeSkill, findCertifications, findSkills, isTransferable } from '../jobs/search/skills'
+import {
+  canonicalizeSkill,
+  findCertifications,
+  findSkills,
+  isTransferable
+} from '../jobs/search/skills'
 
 export interface CandidateOccupation {
   id: string
@@ -24,7 +29,11 @@ export interface CandidateModel {
   embeddingText: string
 }
 
-export function buildCandidateModel(profile: CandidateProfile, resumeText: string, location?: ResolvedPlace): CandidateModel {
+export function buildCandidateModel(
+  profile: CandidateProfile,
+  resumeText: string,
+  location?: ResolvedPlace
+): CandidateModel {
   const occ = new Map<string, CandidateOccupation>()
   let totalMonths = 0
   for (const w of profile.workHistory) {
@@ -33,9 +42,17 @@ export function buildCandidateModel(profile: CandidateProfile, resumeText: strin
     const tag = classifyJob(w.title, w.summary ?? '')
     if (!tag) continue
     const prev = occ.get(tag.id)
-    occ.set(tag.id, { id: tag.id, months: (prev?.months ?? 0) + months, strength: 1, source: 'history' })
+    occ.set(tag.id, {
+      id: tag.id,
+      months: (prev?.months ?? 0) + months,
+      strength: 1,
+      source: 'history'
+    })
   }
-  for (const role of [...profile.preferences.targetRoles, ...profile.preferences.targetOccupations]) {
+  for (const role of [
+    ...profile.preferences.targetRoles,
+    ...profile.preferences.targetOccupations
+  ]) {
     for (const id of classifyQuery(role).slice(0, 2)) {
       if (!occ.has(id)) occ.set(id, { id, months: 0, strength: 0.6, source: 'target' })
     }
@@ -46,15 +63,18 @@ export function buildCandidateModel(profile: CandidateProfile, resumeText: strin
     for (const id of canonicalizeSkill(s.name)) skills.add(id)
   }
   if (resumeText) for (const id of findSkills(resumeText)) skills.add(id)
-  for (const w of profile.workHistory) if (w.summary) for (const id of findSkills(w.summary)) skills.add(id)
+  for (const w of profile.workHistory)
+    if (w.summary) for (const id of findSkills(w.summary)) skills.add(id)
 
   const certs = new Set<string>()
-  for (const c of profile.certifications) for (const id of findCertifications(c.name, { strict: false })) certs.add(id)
+  for (const c of profile.certifications)
+    for (const id of findCertifications(c.name, { strict: false })) certs.add(id)
   if (resumeText) for (const id of findCertifications(resumeText)) certs.add(id)
 
   const specific = new Set([...skills].filter((s) => !isTransferable(s)))
   const transferable = new Set([...skills].filter((s) => isTransferable(s)))
-  if (profile.totalExperienceMonths && profile.totalExperienceMonths > totalMonths) totalMonths = profile.totalExperienceMonths
+  if (profile.totalExperienceMonths && profile.totalExperienceMonths > totalMonths)
+    totalMonths = profile.totalExperienceMonths
 
   const seniority: Seniority | undefined =
     profile.workHistory.length === 0 && totalMonths === 0

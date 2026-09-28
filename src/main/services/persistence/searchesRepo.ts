@@ -51,7 +51,9 @@ export class SearchesRepo {
   }
 
   list(): SavedSearch[] {
-    return this.db.all<Row>('SELECT * FROM search_profiles ORDER BY created_at ASC').map((r) => this.hydrate(r))
+    return this.db
+      .all<Row>('SELECT * FROM search_profiles ORDER BY created_at ASC')
+      .map((r) => this.hydrate(r))
   }
 
   get(id: string): SavedSearch | undefined {
@@ -75,13 +77,31 @@ export class SearchesRepo {
       this.db.run(
         `UPDATE search_profiles SET name = ?, criteria = ?, enabled = ?, interval_minutes = ?, notify = ?, min_score_to_notify = ?
          WHERE id = ?`,
-        [input.name, JSON.stringify(input.criteria), input.enabled ? 1 : 0, interval, input.notify ? 1 : 0, input.minScoreToNotify, id]
+        [
+          input.name,
+          JSON.stringify(input.criteria),
+          input.enabled ? 1 : 0,
+          interval,
+          input.notify ? 1 : 0,
+          input.minScoreToNotify,
+          id
+        ]
       )
     } else {
       this.db.run(
         `INSERT INTO search_profiles (id, name, criteria, enabled, interval_minutes, notify, min_score_to_notify, next_run_at, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, input.name, JSON.stringify(input.criteria), input.enabled ? 1 : 0, interval, input.notify ? 1 : 0, input.minScoreToNotify, now, now]
+        [
+          id,
+          input.name,
+          JSON.stringify(input.criteria),
+          input.enabled ? 1 : 0,
+          interval,
+          input.notify ? 1 : 0,
+          input.minScoreToNotify,
+          now,
+          now
+        ]
       )
     }
     return this.get(id)!
@@ -92,16 +112,16 @@ export class SearchesRepo {
   }
 
   setEnabled(id: string, enabled: boolean): void {
-    this.db.run('UPDATE search_profiles SET enabled = ?, next_run_at = CASE WHEN ? = 1 THEN ? ELSE next_run_at END WHERE id = ?', [
-      enabled ? 1 : 0,
-      enabled ? 1 : 0,
-      new Date().toISOString(),
-      id
-    ])
+    this.db.run(
+      'UPDATE search_profiles SET enabled = ?, next_run_at = CASE WHEN ? = 1 THEN ? ELSE next_run_at END WHERE id = ?',
+      [enabled ? 1 : 0, enabled ? 1 : 0, new Date().toISOString(), id]
+    )
   }
 
   due(nowIso: string): SavedSearch[] {
-    return this.list().filter((s) => s.enabled && !s.running && (!s.nextRunAt || s.nextRunAt <= nowIso))
+    return this.list().filter(
+      (s) => s.enabled && !s.running && (!s.nextRunAt || s.nextRunAt <= nowIso)
+    )
   }
 
   /** Atomically claims a search for running; returns false if another run holds it. */
@@ -130,7 +150,14 @@ export class SearchesRepo {
     this.db.run(
       `UPDATE search_profiles SET last_run_at = ?, last_success_at = ?, last_result_count = ?, last_new_count = ?,
          last_error = NULL, consecutive_failures = 0, next_run_at = ?, running_since = NULL WHERE id = ?`,
-      [now.toISOString(), now.toISOString(), resultCount, newCount, new Date(now.getTime() + s.intervalMinutes * 60_000).toISOString(), id]
+      [
+        now.toISOString(),
+        now.toISOString(),
+        resultCount,
+        newCount,
+        new Date(now.getTime() + s.intervalMinutes * 60_000).toISOString(),
+        id
+      ]
     )
   }
 
@@ -144,7 +171,13 @@ export class SearchesRepo {
     this.db.run(
       `UPDATE search_profiles SET last_run_at = ?, last_error = ?, consecutive_failures = ?, next_run_at = ?, running_since = NULL
        WHERE id = ?`,
-      [now.toISOString(), error.slice(0, 500), failures, new Date(now.getTime() + backoffMin * 60_000).toISOString(), id]
+      [
+        now.toISOString(),
+        error.slice(0, 500),
+        failures,
+        new Date(now.getTime() + backoffMin * 60_000).toISOString(),
+        id
+      ]
     )
   }
 
@@ -157,11 +190,10 @@ export class SearchesRepo {
     this.db.transaction(() => {
       for (const jobId of jobIds) {
         if (
-          this.db.run('INSERT OR IGNORE INTO search_seen_jobs (search_id, job_id, first_seen_at) VALUES (?, ?, ?)', [
-            searchId,
-            jobId,
-            now
-          ]) === 1
+          this.db.run(
+            'INSERT OR IGNORE INTO search_seen_jobs (search_id, job_id, first_seen_at) VALUES (?, ?, ?)',
+            [searchId, jobId, now]
+          ) === 1
         ) {
           fresh.push(jobId)
         }
@@ -183,7 +215,10 @@ export class SearchesRepo {
     const now = new Date().toISOString()
     this.db.transaction(() => {
       for (const jobId of jobIds) {
-        this.db.run('UPDATE search_seen_jobs SET notified_at = ? WHERE search_id = ? AND job_id = ?', [now, searchId, jobId])
+        this.db.run(
+          'UPDATE search_seen_jobs SET notified_at = ? WHERE search_id = ? AND job_id = ?',
+          [now, searchId, jobId]
+        )
       }
     })
   }
@@ -192,32 +227,46 @@ export class SearchesRepo {
 
   startRun(searchId: string | null, trigger: string): string {
     const id = randomUUID()
-    this.db.run('INSERT INTO automation_runs (id, search_id, trigger, started_at, status) VALUES (?, ?, ?, ?, ?)', [
-      id,
-      searchId,
-      trigger,
-      new Date().toISOString(),
-      'running'
-    ])
+    this.db.run(
+      'INSERT INTO automation_runs (id, search_id, trigger, started_at, status) VALUES (?, ?, ?, ?, ?)',
+      [id, searchId, trigger, new Date().toISOString(), 'running']
+    )
     return id
   }
 
-  finishRun(runId: string, status: 'ok' | 'error' | 'cancelled', stats?: SearchStats, error?: string): void {
-    this.db.run('UPDATE automation_runs SET finished_at = ?, status = ?, stats = ?, error = ? WHERE id = ?', [
-      new Date().toISOString(),
-      status,
-      stats ? JSON.stringify(stats) : null,
-      error ?? null,
-      runId
-    ])
+  finishRun(
+    runId: string,
+    status: 'ok' | 'error' | 'cancelled',
+    stats?: SearchStats,
+    error?: string
+  ): void {
+    this.db.run(
+      'UPDATE automation_runs SET finished_at = ?, status = ?, stats = ?, error = ? WHERE id = ?',
+      [new Date().toISOString(), status, stats ? JSON.stringify(stats) : null, error ?? null, runId]
+    )
   }
 
-  recentRuns(limit = 30): { id: string; searchId?: string; trigger: string; startedAt: string; finishedAt?: string; status: string; stats?: SearchStats; error?: string }[] {
+  recentRuns(limit = 30): {
+    id: string
+    searchId?: string
+    trigger: string
+    startedAt: string
+    finishedAt?: string
+    status: string
+    stats?: SearchStats
+    error?: string
+  }[] {
     return this.db
-      .all<{ id: string; search_id: string | null; trigger: string; started_at: string; finished_at: string | null; status: string; stats: string | null; error: string | null }>(
-        'SELECT * FROM automation_runs ORDER BY started_at DESC LIMIT ?',
-        [limit]
-      )
+      .all<{
+        id: string
+        search_id: string | null
+        trigger: string
+        started_at: string
+        finished_at: string | null
+        status: string
+        stats: string | null
+        error: string | null
+      }>('SELECT * FROM automation_runs ORDER BY started_at DESC LIMIT ?', [limit])
       .map((r) => ({
         id: r.id,
         searchId: r.search_id ?? undefined,
@@ -231,13 +280,18 @@ export class SearchesRepo {
   }
 
   lastSuccessfulRunAt(): string | undefined {
-    return this.db.get<{ t: string | null }>("SELECT MAX(finished_at) AS t FROM automation_runs WHERE status = 'ok'")?.t ?? undefined
+    return (
+      this.db.get<{ t: string | null }>(
+        "SELECT MAX(finished_at) AS t FROM automation_runs WHERE status = 'ok'"
+      )?.t ?? undefined
+    )
   }
 
   /** Marks runs left 'running' by a crashed process as abandoned. */
   abandonDanglingRuns(): void {
-    this.db.run("UPDATE automation_runs SET status = 'error', error = 'Interrupted (application closed)', finished_at = ? WHERE status = 'running'", [
-      new Date().toISOString()
-    ])
+    this.db.run(
+      "UPDATE automation_runs SET status = 'error', error = 'Interrupted (application closed)', finished_at = ? WHERE status = 'running'",
+      [new Date().toISOString()]
+    )
   }
 }

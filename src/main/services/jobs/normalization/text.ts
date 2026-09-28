@@ -4,16 +4,48 @@
  * scripts, styles and other executable content are dropped entirely.
  */
 const ENTITIES: Record<string, string> = {
-  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—', hellip: '…', bull: '•',
-  rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', middot: '·', eacute: 'é', egrave: 'è', aacute: 'á', oacute: 'ó',
-  uacute: 'ú', iacute: 'í', ntilde: 'ñ', uuml: 'ü', ouml: 'ö', auml: 'ä', szlig: 'ß', copy: '©', reg: '®', trade: '™',
-  euro: '€', pound: '£', yen: '¥', cent: '¢', deg: '°', times: '×'
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  ndash: '–',
+  mdash: '—',
+  hellip: '…',
+  bull: '•',
+  rsquo: '’',
+  lsquo: '‘',
+  rdquo: '”',
+  ldquo: '“',
+  middot: '·',
+  eacute: 'é',
+  egrave: 'è',
+  aacute: 'á',
+  oacute: 'ó',
+  uacute: 'ú',
+  iacute: 'í',
+  ntilde: 'ñ',
+  uuml: 'ü',
+  ouml: 'ö',
+  auml: 'ä',
+  szlig: 'ß',
+  copy: '©',
+  reg: '®',
+  trade: '™',
+  euro: '€',
+  pound: '£',
+  yen: '¥',
+  cent: '¢',
+  deg: '°',
+  times: '×'
 }
 
 export function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
     if (e[0] === '#') {
-      const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)
+      const code =
+        e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)
       return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : ''
     }
     return ENTITIES[e.toLowerCase()] ?? m
@@ -30,11 +62,14 @@ export function htmlToText(html: string | undefined, maxLength = 20_000): string
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<\s*br\s*\/?>/gi, '\n')
     .replace(/<\s*li[^>]*>/gi, '\n• ')
-    .replace(/<\s*\/(p|div|h[1-6]|ul|ol|li|tr|section|article|header|footer|blockquote)\s*>/gi, '\n')
+    .replace(
+      /<\s*\/(p|div|h[1-6]|ul|ol|li|tr|section|article|header|footer|blockquote)\s*>/gi,
+      '\n'
+    )
     .replace(/<\s*(p|div|h[1-6]|ul|ol|tr|section|article|blockquote)[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
   s = decodeEntities(s)
-    .replace(/ /g, ' ')
+    .replace(/\u00a0/g, ' ')
     .replace(/[ \t\f\v]+/g, ' ')
     .replace(/ *\n */g, '\n')
     .replace(/\n{3,}/g, '\n\n')
@@ -44,11 +79,14 @@ export function htmlToText(html: string | undefined, maxLength = 20_000): string
 
 export function cleanInline(s: string | undefined, max = 300): string {
   if (!s) return ''
-  const t = decodeEntities(s.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim()
+  const t = decodeEntities(s.replace(/<[^>]+>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim()
   return t.length > max ? t.slice(0, max) : t
 }
 
-const SECTION_HEAD = /^(?:#+\s*)?(what you'?ll do|what you will do|responsibilities|duties|key responsibilities|essential duties|your role|the role|job duties|requirements|qualifications|what we'?re looking for|what you'?ll need|who you are|you have|must have|minimum qualifications|basic qualifications|required qualifications|required skills|preferred qualifications|nice to have|bonus points|preferred|pluses|benefits|perks|about us|about the company|compensation|pay)\b.*$/i
+const SECTION_HEAD =
+  /^(?:#+\s*)?(what you'?ll do|what you will do|responsibilities|duties|key responsibilities|essential duties|your role|the role|job duties|requirements|qualifications|what we'?re looking for|what you'?ll need|who you are|you have|must have|minimum qualifications|basic qualifications|required qualifications|required skills|preferred qualifications|nice to have|bonus points|preferred|pluses|benefits|perks|about us|about the company|compensation|pay)\b.*$/i
 
 export interface Sections {
   responsibilities: string[]
@@ -69,7 +107,10 @@ export function splitSections(text: string): Sections {
       const h = head[1].toLowerCase()
       if (/responsib|duties|what you|your role|the role/.test(h)) bucket = 'responsibilities'
       else if (/preferred|nice to have|bonus|pluses/.test(h)) bucket = 'preferred'
-      else if (/requirement|qualification|looking for|need|who you are|you have|must have|required/.test(h)) bucket = 'required'
+      else if (
+        /requirement|qualification|looking for|need|who you are|you have|must have|required/.test(h)
+      )
+        bucket = 'required'
       else bucket = 'other'
       continue
     }

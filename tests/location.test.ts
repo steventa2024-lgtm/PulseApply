@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { NormalizedJob, WorkMode } from '../src/shared/types'
 import { Gazetteer } from '../src/main/services/jobs/geo/gazetteer'
-import { evaluateGeo, GeoService, parseRemoteEligibility } from '../src/main/services/jobs/geo/geoService'
+import {
+  evaluateGeo,
+  GeoService,
+  parseRemoteEligibility
+} from '../src/main/services/jobs/geo/geoService'
 import { buildIntent } from '../src/main/services/jobs/search/intent'
 import { normalizeDraft } from '../src/main/services/jobs/normalization/normalize'
 import { RESOURCES } from './helpers'
@@ -9,23 +13,47 @@ import { RESOURCES } from './helpers'
 const gaz = new Gazetteer(RESOURCES)
 const geo = new GeoService(gaz, null, null, () => false)
 
-function job(locationText: string, workModes?: WorkMode[], remoteEligibilityText?: string): NormalizedJob {
+function job(
+  locationText: string,
+  workModes?: WorkMode[],
+  remoteEligibilityText?: string
+): NormalizedJob {
   const r = normalizeDraft(
-    { sourceJobId: locationText, sourceUrl: 'https://example.com/j/1', title: 'Warehouse Associate', company: 'X', descriptionText: 'Pick and pack.', locationText, workModes, remoteEligibilityText, employerDirect: false },
+    {
+      sourceJobId: locationText,
+      sourceUrl: 'https://example.com/j/1',
+      title: 'Warehouse Associate',
+      company: 'X',
+      descriptionText: 'Pick and pack.',
+      locationText,
+      workModes,
+      remoteEligibilityText,
+      employerDirect: false
+    },
     { providerId: 't', providerName: 'T', geo }
   )
   return r.job!
 }
 
-function intent(location: string, radius: number, modes?: WorkMode[]) {
-  const i = buildIntent({ query: 'warehouse', location, radius, radiusUnit: 'mi', workModes: modes })
+function intent(location: string, radius: number, modes?: WorkMode[]): SearchIntent {
+  const i = buildIntent({
+    query: 'warehouse',
+    location,
+    radius,
+    radiusUnit: 'mi',
+    workModes: modes
+  })
   i.location = gaz.resolve(location)
   return i
 }
 
 describe('gazetteer', () => {
   it('resolves ambiguous state/country codes sensibly', () => {
-    expect(gaz.resolve('Los Angeles, CA')).toMatchObject({ city: 'Los Angeles', country: 'US', region: 'CA' })
+    expect(gaz.resolve('Los Angeles, CA')).toMatchObject({
+      city: 'Los Angeles',
+      country: 'US',
+      region: 'CA'
+    })
     expect(gaz.resolve('Berlin, DE')).toMatchObject({ city: 'Berlin', country: 'DE' })
     expect(gaz.resolve('Newark, DE')).toMatchObject({ city: 'Newark', country: 'US', region: 'DE' })
     expect(gaz.resolve('Toronto, ON, Canada')).toMatchObject({ city: 'Toronto', country: 'CA' })
@@ -65,24 +93,44 @@ describe('geographic filtering', () => {
 
   it('applies remote eligibility by country and region', () => {
     const us = intent('United States', 0, ['remote'])
-    expect(evaluateGeo(job('Remote', ['remote'], 'USA Only'), us)).toMatchObject({ include: true, eligibility: 'remote_eligible' })
-    expect(evaluateGeo(job('Remote', ['remote'], 'Europe'), us)).toMatchObject({ include: false, eligibility: 'remote_ineligible' })
-    expect(evaluateGeo(job('Remote', ['remote'], 'Anywhere in the World'), us)).toMatchObject({ include: true, eligibility: 'remote_eligible' })
+    expect(evaluateGeo(job('Remote', ['remote'], 'USA Only'), us)).toMatchObject({
+      include: true,
+      eligibility: 'remote_eligible'
+    })
+    expect(evaluateGeo(job('Remote', ['remote'], 'Europe'), us)).toMatchObject({
+      include: false,
+      eligibility: 'remote_ineligible'
+    })
+    expect(evaluateGeo(job('Remote', ['remote'], 'Anywhere in the World'), us)).toMatchObject({
+      include: true,
+      eligibility: 'remote_eligible'
+    })
     const unspecified = evaluateGeo(job('Remote', ['remote']), us)
     expect(unspecified.eligibility).toBe('remote_unspecified')
     const de = intent('Germany', 0, ['remote'])
     expect(evaluateGeo(job('Remote', ['remote'], 'EMEA'), de)).toMatchObject({ include: true })
-    expect(evaluateGeo(job('Remote', ['remote'], 'US, Canada'), de)).toMatchObject({ include: false })
+    expect(evaluateGeo(job('Remote', ['remote'], 'US, Canada'), de)).toMatchObject({
+      include: false
+    })
   })
 
   it('country-level searches match on country', () => {
     const de = intent('Germany', 0)
-    expect(evaluateGeo(job('Munich, Germany'), de)).toMatchObject({ include: true, eligibility: 'in_country' })
-    expect(evaluateGeo(job('Austin, TX'), de)).toMatchObject({ include: false, eligibility: 'outside_country' })
+    expect(evaluateGeo(job('Munich, Germany'), de)).toMatchObject({
+      include: true,
+      eligibility: 'in_country'
+    })
+    expect(evaluateGeo(job('Austin, TX'), de)).toMatchObject({
+      include: false,
+      eligibility: 'outside_country'
+    })
   })
 
   it('parses remote eligibility statements', () => {
-    expect(parseRemoteEligibility('USA Only')).toMatchObject({ kind: 'countries', countries: ['US'] })
+    expect(parseRemoteEligibility('USA Only')).toMatchObject({
+      kind: 'countries',
+      countries: ['US']
+    })
     expect(parseRemoteEligibility('Worldwide')).toMatchObject({ kind: 'worldwide' })
     expect(parseRemoteEligibility('')).toMatchObject({ kind: 'unspecified' })
     expect(parseRemoteEligibility('LATAM')).toMatchObject({ kind: 'regions', regions: ['latam'] })

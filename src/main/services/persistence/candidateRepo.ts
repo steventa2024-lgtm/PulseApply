@@ -69,17 +69,23 @@ export class CandidateRepo {
   ) {}
 
   get(): CandidateProfile {
-    const row = this.db.get<{ data: string; sensitive: string | null; sensitive_encrypted: number }>(
-      'SELECT data, sensitive, sensitive_encrypted FROM candidates WHERE id = ?',
-      [PRIMARY_CANDIDATE]
-    )
+    const row = this.db.get<{
+      data: string
+      sensitive: string | null
+      sensitive_encrypted: number
+    }>('SELECT data, sensitive, sensitive_encrypted FROM candidates WHERE id = ?', [
+      PRIMARY_CANDIDATE
+    ])
     const base = emptyProfile()
     if (!row) return base
     const data = json<Partial<CandidateProfile>>(row.data, {})
     let sensitive = defaultSensitive()
     if (row.sensitive) {
       try {
-        sensitive = { ...sensitive, ...JSON.parse(this.secrets.decryptBlob(row.sensitive, !!row.sensitive_encrypted)) }
+        sensitive = {
+          ...sensitive,
+          ...JSON.parse(this.secrets.decryptBlob(row.sensitive, !!row.sensitive_encrypted))
+        }
       } catch {
         sensitive = defaultSensitive()
       }
@@ -139,7 +145,9 @@ export class CandidateRepo {
 
   resumes(): ResumeRecord[] {
     return this.db
-      .all<ResumeRow>('SELECT * FROM resumes WHERE candidate_id = ? ORDER BY parsed_at DESC', [PRIMARY_CANDIDATE])
+      .all<ResumeRow>('SELECT * FROM resumes WHERE candidate_id = ? ORDER BY parsed_at DESC', [
+        PRIMARY_CANDIDATE
+      ])
       .map((r) => this.hydrateResume(r))
   }
 
@@ -150,24 +158,36 @@ export class CandidateRepo {
 
   defaultResume(): ResumeRecord | undefined {
     const r =
-      this.db.get<ResumeRow>('SELECT * FROM resumes WHERE candidate_id = ? AND is_default = 1', [PRIMARY_CANDIDATE]) ??
-      this.db.get<ResumeRow>('SELECT * FROM resumes WHERE candidate_id = ? ORDER BY parsed_at DESC LIMIT 1', [PRIMARY_CANDIDATE])
+      this.db.get<ResumeRow>('SELECT * FROM resumes WHERE candidate_id = ? AND is_default = 1', [
+        PRIMARY_CANDIDATE
+      ]) ??
+      this.db.get<ResumeRow>(
+        'SELECT * FROM resumes WHERE candidate_id = ? ORDER BY parsed_at DESC LIMIT 1',
+        [PRIMARY_CANDIDATE]
+      )
     return r ? this.hydrateResume(r) : undefined
   }
 
   resumeText(id: string): string {
-    return this.db.get<{ raw_text: string }>('SELECT raw_text FROM resumes WHERE id = ?', [id])?.raw_text ?? ''
+    return (
+      this.db.get<{ raw_text: string }>('SELECT raw_text FROM resumes WHERE id = ?', [id])
+        ?.raw_text ?? ''
+    )
   }
 
   findResumeBySha(sha: string): ResumeRecord | undefined {
-    const r = this.db.get<ResumeRow>('SELECT * FROM resumes WHERE candidate_id = ? AND sha256 = ?', [PRIMARY_CANDIDATE, sha])
+    const r = this.db.get<ResumeRow>(
+      'SELECT * FROM resumes WHERE candidate_id = ? AND sha256 = ?',
+      [PRIMARY_CANDIDATE, sha]
+    )
     return r ? this.hydrateResume(r) : undefined
   }
 
   addResume(rec: ResumeRecord, rawText: string): ResumeRecord {
     this.db.transaction(() => {
       if (!this.exists()) this.save(emptyProfile())
-      if (rec.isDefault) this.db.run('UPDATE resumes SET is_default = 0 WHERE candidate_id = ?', [PRIMARY_CANDIDATE])
+      if (rec.isDefault)
+        this.db.run('UPDATE resumes SET is_default = 0 WHERE candidate_id = ?', [PRIMARY_CANDIDATE])
       this.db.run(
         `INSERT INTO resumes (id, candidate_id, label, file_name, stored_path, sha256, format, text_length, needs_ocr, is_default,
            parsed_at, warnings, raw_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

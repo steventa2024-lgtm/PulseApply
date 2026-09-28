@@ -3,7 +3,15 @@ import { formatSalary } from '../../../shared/format'
 import type { Store } from '../persistence/store'
 import { decodeCallbackData, encodeCallbackData } from '../persistence/telegramRepo'
 import { DuplicateApplicationError } from '../persistence/applicationsRepo'
-import { TelegramApi, TelegramError, escapeHtml, type InlineButton, type TgCallbackQuery, type TgMessage, type TgUpdate } from './api'
+import {
+  TelegramApi,
+  TelegramError,
+  escapeHtml,
+  type InlineButton,
+  type TgCallbackQuery,
+  type TgMessage,
+  type TgUpdate
+} from './api'
 import { PollingLock } from './pollingLock'
 import { isPublicHttpUrl } from '../jobs/verification/urlSafety'
 import { log } from '../logger'
@@ -70,8 +78,12 @@ export class TelegramService {
       detail: this.detail,
       tokenConfigured: !!this.store.secrets.get(TOKEN_KEY),
       botUsername: this.botUsername,
-      authorizedChats: chats.filter((c) => c.status === 'authorized').map((c) => ({ chatId: c.chatId, label: c.label, addedAt: c.addedAt ?? c.seenAt })),
-      pendingChats: chats.filter((c) => c.status === 'pending').map((c) => ({ chatId: c.chatId, label: c.label, seenAt: c.seenAt })),
+      authorizedChats: chats
+        .filter((c) => c.status === 'authorized')
+        .map((c) => ({ chatId: c.chatId, label: c.label, addedAt: c.addedAt ?? c.seenAt })),
+      pendingChats: chats
+        .filter((c) => c.status === 'pending')
+        .map((c) => ({ chatId: c.chatId, label: c.label, seenAt: c.seenAt })),
       lastPollAt: this.lastPollAt,
       conflictCount: this.conflictCount,
       notificationsEnabled: this.store.settings.getRaw<boolean>(ENABLED_KEY, false)
@@ -93,11 +105,15 @@ export class TelegramService {
   setToken(token: string): Promise<TelegramStatus> {
     return this.enqueue(async () => {
       await this.stopInternal()
-      if (token.trim() && !/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token.trim())) throw new Error('That does not look like a Telegram bot token (expected 123456:ABC…)')
+      if (token.trim() && !/^\d{5,}:[A-Za-z0-9_-]{30,}$/.test(token.trim()))
+        throw new Error('That does not look like a Telegram bot token (expected 123456:ABC…)')
       this.store.secrets.set(TOKEN_KEY, token)
       this.store.settings.setRaw(OFFSET_KEY, 0)
       this.botUsername = undefined
-      this.setState('STOPPED', token.trim() ? 'Token saved. Start the bot to connect.' : 'Token removed.')
+      this.setState(
+        'STOPPED',
+        token.trim() ? 'Token saved. Start the bot to connect.' : 'Token removed.'
+      )
       return this.status()
     })
   }
@@ -122,7 +138,8 @@ export class TelegramService {
 
   /** Called at app launch: resumes polling only if the user had it enabled. */
   resumeIfEnabled(): Promise<TelegramStatus> {
-    if (!this.store.settings.getRaw<boolean>(ENABLED_KEY, false)) return Promise.resolve(this.status())
+    if (!this.store.settings.getRaw<boolean>(ENABLED_KEY, false))
+      return Promise.resolve(this.status())
     return this.enqueue(async () => {
       await this.startInternal()
       return this.status()
@@ -164,13 +181,21 @@ export class TelegramService {
       const hook = await api.getWebhookInfo()
       if (hook.url) {
         lock.release()
-        this.setState('ERROR', 'This bot has a webhook configured, so polling would fail with 409. Use “Remove webhook” if you no longer need it.')
+        this.setState(
+          'ERROR',
+          'This bot has a webhook configured, so polling would fail with 409. Use “Remove webhook” if you no longer need it.'
+        )
         return
       }
     } catch (err) {
       lock.release()
       const e = err as TelegramError
-      this.setState('ERROR', e.status === 401 || e.status === 404 ? 'Telegram rejected the bot token (unauthorized).' : `Could not reach Telegram: ${e.message}`)
+      this.setState(
+        'ERROR',
+        e.status === 401 || e.status === 404
+          ? 'Telegram rejected the bot token (unauthorized).'
+          : `Could not reach Telegram: ${e.message}`
+      )
       return
     }
     this.api = api
@@ -179,7 +204,9 @@ export class TelegramService {
     this.conflictCount = 0
     const gen = ++this.generation
     this.setState('RUNNING', `Connected as @${this.botUsername ?? 'bot'}`)
-    this.loopDone = this.loop(gen, api, this.abort.signal).catch((err) => log.error('telegram', err))
+    this.loopDone = this.loop(gen, api, this.abort.signal).catch((err) =>
+      log.error('telegram', err)
+    )
   }
 
   private async stopInternal(): Promise<void> {
@@ -204,10 +231,14 @@ export class TelegramService {
   private async sleep(ms: number, signal: AbortSignal): Promise<void> {
     await new Promise<void>((resolve) => {
       const t = setTimeout(resolve, ms)
-      signal.addEventListener('abort', () => {
-        clearTimeout(t)
-        resolve()
-      }, { once: true })
+      signal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(t)
+          resolve()
+        },
+        { once: true }
+      )
     })
   }
 
@@ -227,7 +258,9 @@ export class TelegramService {
         for (const u of updates) {
           offset = Math.max(offset, u.update_id + 1)
           this.store.settings.setRaw(OFFSET_KEY, offset)
-          await this.handleUpdate(api, u).catch((err) => log.warn('telegram', `Update ${u.update_id} failed: ${(err as Error).message}`))
+          await this.handleUpdate(api, u).catch((err) =>
+            log.warn('telegram', `Update ${u.update_id} failed: ${(err as Error).message}`)
+          )
         }
       } catch (err) {
         if (signal.aborted || gen !== this.generation) break
@@ -238,11 +271,20 @@ export class TelegramService {
             this.generation++
             this.lock?.release()
             this.lock = null
-            this.setState('ERROR', 'Telegram keeps reporting 409: another program or computer is polling this bot token (or a webhook is set). Stop the other client, then start again.')
+            this.setState(
+              'ERROR',
+              'Telegram keeps reporting 409: another program or computer is polling this bot token (or a webhook is set). Stop the other client, then start again.'
+            )
             return
           }
-          this.setState('RUNNING', `Waiting for a previous Telegram session to expire (409, attempt ${this.conflictCount}/${MAX_CONFLICTS})…`)
-          await this.sleep(Math.min(30_000, (this.deps.conflictBackoffMs ?? 2000) * 2 ** (this.conflictCount - 1)), signal)
+          this.setState(
+            'RUNNING',
+            `Waiting for a previous Telegram session to expire (409, attempt ${this.conflictCount}/${MAX_CONFLICTS})…`
+          )
+          await this.sleep(
+            Math.min(30_000, (this.deps.conflictBackoffMs ?? 2000) * 2 ** (this.conflictCount - 1)),
+            signal
+          )
           continue
         }
         if (e.status === 401 || e.status === 404) {
@@ -268,7 +310,13 @@ export class TelegramService {
   }
 
   private chatLabel(m: TgMessage): string {
-    return m.chat.title ?? ([m.from?.first_name, m.from?.username ? `@${m.from.username}` : ''].filter(Boolean).join(' ') || String(m.chat.id))
+    return (
+      m.chat.title ??
+      ([m.from?.first_name, m.from?.username ? `@${m.from.username}` : '']
+        .filter(Boolean)
+        .join(' ') ||
+        String(m.chat.id))
+    )
   }
 
   private async handleMessage(api: TelegramApi, m: TgMessage): Promise<void> {
@@ -278,24 +326,37 @@ export class TelegramService {
       if (cmd === '/start') {
         this.store.telegram.notePending(chatId, this.chatLabel(m))
         this.deps.emit(this.status())
-        await api.sendMessage(chatId, `This chat is not authorized yet.\nChat ID: <code>${escapeHtml(chatId)}</code>\nApprove it in PulseApply → Automation → Telegram.`)
+        await api.sendMessage(
+          chatId,
+          `This chat is not authorized yet.\nChat ID: <code>${escapeHtml(chatId)}</code>\nApprove it in PulseApply → Automation → Telegram.`
+        )
       }
       return
     }
     if (cmd === '/start' || cmd === '/help') {
-      await api.sendMessage(chatId, 'PulseApply is connected ✅\nYou will receive new matching jobs from your scheduled searches.\n/status — summary\n/pause — pause scheduled searches\n/resume — resume them')
+      await api.sendMessage(
+        chatId,
+        'PulseApply is connected ✅\nYou will receive new matching jobs from your scheduled searches.\n/status — summary\n/pause — pause scheduled searches\n/resume — resume them'
+      )
     } else if (cmd === '/status') {
       const s = this.store.jobs.stats(new Date(Date.now() - 86400_000).toISOString(), 75)
       const searches = this.store.searches.list()
-      await api.sendMessage(chatId, `Jobs tracked: ${s.total}\nNew in 24h: ${s.newJobs}\nStrong matches: ${s.strong}\nScheduled searches: ${searches.filter((x) => x.enabled).length}/${searches.length} active`)
+      await api.sendMessage(
+        chatId,
+        `Jobs tracked: ${s.total}\nNew in 24h: ${s.newJobs}\nStrong matches: ${s.strong}\nScheduled searches: ${searches.filter((x) => x.enabled).length}/${searches.length} active`
+      )
     } else if (cmd === '/pause' || cmd === '/resume') {
-      for (const s of this.store.searches.list()) this.store.searches.setEnabled(s.id, cmd === '/resume')
-      await api.sendMessage(chatId, cmd === '/pause' ? 'Scheduled searches paused.' : 'Scheduled searches resumed.')
+      for (const s of this.store.searches.list())
+        this.store.searches.setEnabled(s.id, cmd === '/resume')
+      await api.sendMessage(
+        chatId,
+        cmd === '/pause' ? 'Scheduled searches paused.' : 'Scheduled searches resumed.'
+      )
     }
   }
 
   async handleCallback(api: TelegramApi, cb: TgCallbackQuery): Promise<string> {
-    const answer = async (text: string) => {
+    const answer = async (text: string): Promise<string> => {
       await api.answerCallbackQuery(cb.id, text).catch(() => undefined)
       return text
     }
@@ -303,7 +364,8 @@ export class TelegramService {
     const fromId = String(cb.from.id)
     const chatAuthorized = this.store.telegram.isAuthorized(chatId)
     // In a group chat the person pressing the button must be authorized too.
-    const userAuthorized = chatId === fromId ? chatAuthorized : this.store.telegram.isAuthorized(fromId)
+    const userAuthorized =
+      chatId === fromId ? chatAuthorized : this.store.telegram.isAuthorized(fromId)
     if (!chatAuthorized || !userAuthorized) {
       log.warn('telegram', `Rejected callback from unauthorized chat ${chatId}`)
       return answer('This chat is not authorized for PulseApply.')
@@ -313,7 +375,8 @@ export class TelegramService {
     const rec = this.store.telegram.getCallback(decoded.token)
     if (!rec || rec.action !== decoded.action) return answer('This button is no longer recognised.')
     if (rec.chatId !== chatId) return answer('This button belongs to another chat.')
-    if (rec.expiresAt < new Date().toISOString()) return answer('This button has expired. Open PulseApply to see current jobs.')
+    if (rec.expiresAt < new Date().toISOString())
+      return answer('This button has expired. Open PulseApply to see current jobs.')
     const job = this.store.jobs.get(rec.jobId)
     if (!job) return answer('This job is no longer available in PulseApply.')
 
@@ -326,13 +389,20 @@ export class TelegramService {
         return answer(`Dismissed: ${job.title}`)
       case 'a': {
         // Atomic consume: a double-tap or a re-delivered update cannot queue twice.
-        if (!this.store.telegram.consume(rec.token, 'queued')) return answer('Already handled — check the Applications page in PulseApply.')
+        if (!this.store.telegram.consume(rec.token, 'queued'))
+          return answer('Already handled — check the Applications page in PulseApply.')
         try {
           this.deps.queueApplication(job.id)
-          return answer(`Queued "${job.title}". Open PulseApply on your computer to review and submit.`)
+          return answer(
+            `Queued "${job.title}". Open PulseApply on your computer to review and submit.`
+          )
         } catch (err) {
           if (err instanceof DuplicateApplicationError) {
-            return answer(err.existingState === 'SUBMITTED' ? 'You already applied to this job.' : 'An application for this job is already in progress.')
+            return answer(
+              err.existingState === 'SUBMITTED'
+                ? 'You already applied to this job.'
+                : 'An application for this job is already in progress.'
+            )
           }
           return answer(`Could not queue: ${(err as Error).message}`)
         }
@@ -343,8 +413,14 @@ export class TelegramService {
   // --- notifications ----------------------------------------------------------
 
   /** Builds the message + keyboard for one job (exported for tests). */
-  jobMessage(job: ScoredJob, chatId: string, notificationId: string): { text: string; keyboard: InlineButton[][] } {
-    const score = job.match ? `Match ${job.match.score}/100 (${job.match.band})` : 'Match: upload a resume to score'
+  jobMessage(
+    job: ScoredJob,
+    chatId: string,
+    notificationId: string
+  ): { text: string; keyboard: InlineButton[][] } {
+    const score = job.match
+      ? `Match ${job.match.score}/100 (${job.match.band})`
+      : 'Match: upload a resume to score'
     const where = job.geo?.note ?? job.locationText ?? ''
     const text = [
       `<b>${escapeHtml(job.title)}</b>`,
@@ -359,7 +435,11 @@ export class TelegramService {
     const row: InlineButton[] = []
     const url = job.canonicalJobUrl ?? job.sourceUrl
     if (isPublicHttpUrl(url)) row.push({ text: 'Open ↗', url })
-    for (const [action, label] of [['s', '⭐ Save'], ['a', '📝 Apply'], ['d', '✖']] as const) {
+    for (const [action, label] of [
+      ['s', '⭐ Save'],
+      ['a', '📝 Apply'],
+      ['d', '✖']
+    ] as const) {
       const rec = this.store.telegram.createCallback(action, job.id, chatId, notificationId)
       row.push({ text: label, callback_data: encodeCallbackData(action, rec.token) })
     }
@@ -367,13 +447,24 @@ export class TelegramService {
   }
 
   /** Sends new matching jobs to every authorized chat. Returns the number of messages sent. */
-  async sendJobBatch(jobs: ScoredJob[], context: { searchId?: string; searchName: string }): Promise<number> {
+  async sendJobBatch(
+    jobs: ScoredJob[],
+    context: { searchId?: string; searchName: string }
+  ): Promise<number> {
     if (this.state !== 'RUNNING' || !this.api) return 0
     const chats = this.store.telegram.chats('authorized')
     let sent = 0
     for (const chat of chats) {
-      const notificationId = this.store.telegram.recordNotification({ searchId: context.searchId, chatId: chat.chatId, jobIds: jobs.map((j) => j.id), kind: 'batch' })
-      await this.api.sendMessage(chat.chatId, `🔔 <b>${jobs.length} new job${jobs.length === 1 ? '' : 's'}</b> for “${escapeHtml(context.searchName)}”`)
+      const notificationId = this.store.telegram.recordNotification({
+        searchId: context.searchId,
+        chatId: chat.chatId,
+        jobIds: jobs.map((j) => j.id),
+        kind: 'batch'
+      })
+      await this.api.sendMessage(
+        chat.chatId,
+        `🔔 <b>${jobs.length} new job${jobs.length === 1 ? '' : 's'}</b> for “${escapeHtml(context.searchName)}”`
+      )
       sent++
       for (const job of jobs.slice(0, 10)) {
         const { text, keyboard } = this.jobMessage(job, chat.chatId, notificationId)
@@ -392,7 +483,10 @@ export class TelegramService {
   async sendTest(): Promise<void> {
     if (this.state !== 'RUNNING' || !this.api) throw new Error('Start the bot first')
     const chats = this.store.telegram.chats('authorized')
-    if (!chats.length) throw new Error('No authorized chats yet. Send /start to your bot, then approve the chat here.')
+    if (!chats.length)
+      throw new Error(
+        'No authorized chats yet. Send /start to your bot, then approve the chat here.'
+      )
     for (const c of chats) await this.api.sendMessage(c.chatId, 'PulseApply test message ✅')
   }
 

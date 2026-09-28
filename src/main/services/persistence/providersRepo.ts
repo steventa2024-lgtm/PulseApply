@@ -16,7 +16,10 @@ export class ProvidersRepo {
   constructor(private readonly db: AppDb) {}
 
   isEnabled(providerId: string, defaultEnabled: boolean): boolean {
-    const r = this.db.get<{ enabled: number }>('SELECT enabled FROM job_sources WHERE provider_id = ?', [providerId])
+    const r = this.db.get<{ enabled: number }>(
+      'SELECT enabled FROM job_sources WHERE provider_id = ?',
+      [providerId]
+    )
     return r ? !!r.enabled : defaultEnabled
   }
 
@@ -29,7 +32,10 @@ export class ProvidersRepo {
   }
 
   getConfig<T>(providerId: string, fallback: T): T {
-    const r = this.db.get<{ config: string }>('SELECT config FROM job_sources WHERE provider_id = ?', [providerId])
+    const r = this.db.get<{ config: string }>(
+      'SELECT config FROM job_sources WHERE provider_id = ?',
+      [providerId]
+    )
     return r ? json<T>(r.config, fallback) : fallback
   }
 
@@ -88,7 +94,11 @@ export class ProvidersRepo {
   // --- cache ---------------------------------------------------------------
 
   static cacheKey(providerId: string, query: unknown): string {
-    return providerId + ':' + createHash('sha256').update(JSON.stringify(query)).digest('hex').slice(0, 32)
+    return (
+      providerId +
+      ':' +
+      createHash('sha256').update(JSON.stringify(query)).digest('hex').slice(0, 32)
+    )
   }
 
   cacheGet<T>(key: string): T | undefined {
@@ -105,7 +115,13 @@ export class ProvidersRepo {
     this.db.run(
       `INSERT INTO provider_cache (cache_key, provider_id, payload, fetched_at, expires_at) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(cache_key) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at, expires_at = excluded.expires_at`,
-      [key, providerId, JSON.stringify(payload), new Date(now).toISOString(), new Date(now + ttlMs).toISOString()]
+      [
+        key,
+        providerId,
+        JSON.stringify(payload),
+        new Date(now).toISOString(),
+        new Date(now + ttlMs).toISOString()
+      ]
     )
   }
 
@@ -156,7 +172,9 @@ export class EmployersRepo {
 
   list(provider?: AtsProvider): EmployerRecord[] {
     const rows = provider
-      ? this.db.all<EmployerRow>('SELECT * FROM employers WHERE ats_provider = ? ORDER BY name', [provider])
+      ? this.db.all<EmployerRow>('SELECT * FROM employers WHERE ats_provider = ? ORDER BY name', [
+          provider
+        ])
       : this.db.all<EmployerRow>('SELECT * FROM employers ORDER BY name')
     return rows.map((r) => this.hydrate(r))
   }
@@ -167,7 +185,10 @@ export class EmployersRepo {
   }
 
   find(provider: AtsProvider, boardId: string): EmployerRecord | undefined {
-    const r = this.db.get<EmployerRow>('SELECT * FROM employers WHERE ats_provider = ? AND board_id = ?', [provider, boardId])
+    const r = this.db.get<EmployerRow>(
+      'SELECT * FROM employers WHERE ats_provider = ? AND board_id = ?',
+      [provider, boardId]
+    )
     return r ? this.hydrate(r) : undefined
   }
 
@@ -201,7 +222,12 @@ export class EmployersRepo {
     return this.find(input.atsProvider, input.boardId)!
   }
 
-  recordSync(id: string, status: EmployerRecord['status'], detail: string | null, jobCount?: number): void {
+  recordSync(
+    id: string,
+    status: EmployerRecord['status'],
+    detail: string | null,
+    jobCount?: number
+  ): void {
     this.db.run(
       'UPDATE employers SET status = ?, status_detail = ?, last_sync_at = ?, job_count = COALESCE(?, job_count) WHERE id = ?',
       [status, detail, new Date().toISOString(), jobCount ?? null, id]

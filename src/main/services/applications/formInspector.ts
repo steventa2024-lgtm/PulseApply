@@ -16,7 +16,19 @@ export interface FieldOption {
 
 export interface InspectedField {
   key: string
-  kind: 'text' | 'email' | 'tel' | 'url' | 'number' | 'date' | 'textarea' | 'select' | 'radio' | 'checkbox' | 'checkbox-group' | 'file'
+  kind:
+    | 'text'
+    | 'email'
+    | 'tel'
+    | 'url'
+    | 'number'
+    | 'date'
+    | 'textarea'
+    | 'select'
+    | 'radio'
+    | 'checkbox'
+    | 'checkbox-group'
+    | 'file'
   label: string
   name: string
   id: string
@@ -169,7 +181,10 @@ export async function inspectPage(page: Page): Promise<FormInspection> {
     if (!sub || sub.fields.length === 0) continue
     main.fields.push(...sub.fields.map((x) => ({ ...x, key: `${i + 1}:${x.key}` })))
     main.hasCaptcha ||= sub.hasCaptcha
-    main.submitButton ??= sub.submitButton && { ...sub.submitButton, key: `${i + 1}:${sub.submitButton.key}` }
+    main.submitButton ??= sub.submitButton && {
+      ...sub.submitButton,
+      key: `${i + 1}:${sub.submitButton.key}`
+    }
     main.validationErrors.push(...sub.validationErrors)
   }
   return main

@@ -11,7 +11,11 @@ const TOKEN = '123456789:AAHfakeTokenForTestsOnly_abcdefghijklmn'
 /** In-process fake of the Telegram Bot API with realistic getUpdates conflict semantics. */
 class FakeTelegram {
   updates: TgUpdate[] = []
-  sent: { chatId: string; text: string; keyboard?: { text: string; url?: string; callback_data?: string }[][] }[] = []
+  sent: {
+    chatId: string
+    text: string
+    keyboard?: { text: string; url?: string; callback_data?: string }[][]
+  }[] = []
   answers: { id: string; text: string }[] = []
   conflicts = 0
   maxConcurrentPolls = 0
@@ -28,15 +32,23 @@ class FakeTelegram {
     const url = new URL(String(input))
     const method = url.pathname.split('/').pop()!
     const body = init?.body ? JSON.parse(String(init.body)) : {}
-    const ok = (result: unknown) => new Response(JSON.stringify({ ok: true, result }), { status: 200 })
+    const ok = (result: unknown): Response =>
+      new Response(JSON.stringify({ ok: true, result }), { status: 200 })
     switch (method) {
       case 'getMe':
         return ok({ id: 1, is_bot: true, username: 'pulse_test_bot' })
       case 'getWebhookInfo':
         return ok({ url: '', pending_update_count: 0 })
       case 'sendMessage':
-        this.sent.push({ chatId: String(body.chat_id), text: body.text, keyboard: body.reply_markup?.inline_keyboard })
-        return ok({ message_id: this.sent.length, chat: { id: Number(body.chat_id), type: 'private' } })
+        this.sent.push({
+          chatId: String(body.chat_id),
+          text: body.text,
+          keyboard: body.reply_markup?.inline_keyboard
+        })
+        return ok({
+          message_id: this.sent.length,
+          chat: { id: Number(body.chat_id), type: 'private' }
+        })
       case 'answerCallbackQuery':
         this.answers.push({ id: body.callback_query_id, text: body.text })
         return ok(true)
@@ -44,14 +56,31 @@ class FakeTelegram {
         if (this.forced409 > 0) {
           this.forced409--
           this.conflicts++
-          return new Response(JSON.stringify({ ok: false, error_code: 409, description: 'Conflict: terminated by other getUpdates request' }), { status: 409 })
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error_code: 409,
+              description: 'Conflict: terminated by other getUpdates request'
+            }),
+            { status: 409 }
+          )
         }
         // A new poll terminates any pending one with 409, like the real API.
         for (const a of this.active.splice(0)) {
           this.conflicts++
-          a.reject(new Response(JSON.stringify({ ok: false, error_code: 409, description: 'Conflict: terminated by other getUpdates request' }), { status: 409 }))
+          a.reject(
+            new Response(
+              JSON.stringify({
+                ok: false,
+                error_code: 409,
+                description: 'Conflict: terminated by other getUpdates request'
+              }),
+              { status: 409 }
+            )
+          )
         }
-        const pending = () => this.updates.filter((u) => u.update_id >= (body.offset ?? 0))
+        const pending = (): TgUpdate[] =>
+          this.updates.filter((u) => u.update_id >= (body.offset ?? 0))
         if (!pending().length) {
           let entry: { resolve: () => void; reject: (e: unknown) => void } | undefined
           await new Promise<void>((resolve, reject) => {
@@ -70,7 +99,9 @@ class FakeTelegram {
         return ok(pending())
       }
     }
-    return new Response(JSON.stringify({ ok: false, error_code: 404, description: 'Not Found' }), { status: 404 })
+    return new Response(JSON.stringify({ ok: false, error_code: 404, description: 'Not Found' }), {
+      status: 404
+    })
   }) as typeof fetch
 }
 
@@ -91,7 +122,7 @@ afterEach(async () => {
   for (const s of services.splice(0)) await s.shutdown()
 })
 
-async function setup(fake: FakeTelegram, dir = tmpDir()) {
+async function setup(fake: FakeTelegram, dir = tmpDir()): Promise<Services> {
   const { svc } = await makeServices({
     userDataDir: dir,
     telegramApiFactory: (t) => new TelegramApi(t, 'https://api.telegram.test', wrap(fake)),
@@ -104,15 +135,27 @@ async function setup(fake: FakeTelegram, dir = tmpDir()) {
 
 function seedJob(svc: Services, title: string): ScoredJob {
   const j = normalizeDraft(
-    { sourceJobId: title, sourceUrl: `https://example.com/jobs/${encodeURIComponent(title)}`, title, company: 'Acme', locationText: 'Carson, CA', employerDirect: false },
+    {
+      sourceJobId: title,
+      sourceUrl: `https://example.com/jobs/${encodeURIComponent(title)}`,
+      title,
+      company: 'Acme',
+      locationText: 'Carson, CA',
+      employerDirect: false
+    },
     { providerId: 'test', providerName: 'Test', geo: svc.geo }
   ).job!
-  const scored: ScoredJob = { ...j, geo: { eligibility: 'within_radius', note: '5 mi' }, relevance: { score: 1, basis: '' }, state: { saved: false, dismissed: false } }
+  const scored: ScoredJob = {
+    ...j,
+    geo: { eligibility: 'within_radius', note: '5 mi' },
+    relevance: { score: 1, basis: '' },
+    state: { saved: false, dismissed: false }
+  }
   svc.store.jobs.upsertMany([scored])
   return svc.store.jobs.get(j.id)!
 }
 
-const until = async (fn: () => boolean, ms = 4000) => {
+const until = async (fn: () => boolean, ms = 4000): Promise<void> => {
   const t0 = Date.now()
   while (!fn()) {
     if (Date.now() - t0 > ms) throw new Error('timeout waiting for condition')
@@ -121,7 +164,14 @@ const until = async (fn: () => boolean, ms = 4000) => {
 }
 
 function cb(chatId: number, data: string, id = String(Math.random())): Omit<TgUpdate, 'update_id'> {
-  return { callback_query: { id, from: { id: chatId }, message: { message_id: 1, chat: { id: chatId, type: 'private' } }, data } }
+  return {
+    callback_query: {
+      id,
+      from: { id: chatId },
+      message: { message_id: 1, chat: { id: chatId, type: 'private' } },
+      data
+    }
+  }
 }
 
 describe('Telegram lifecycle', () => {
@@ -133,7 +183,13 @@ describe('Telegram lifecycle', () => {
     expect((await svc.telegram.stop()).state).toBe('STOPPED')
     expect((await svc.telegram.start()).state).toBe('RUNNING')
     // Rapid toggling without awaiting in between.
-    const ops = [svc.telegram.stop(), svc.telegram.start(), svc.telegram.stop(), svc.telegram.start(), svc.telegram.start()]
+    const ops = [
+      svc.telegram.stop(),
+      svc.telegram.start(),
+      svc.telegram.stop(),
+      svc.telegram.start(),
+      svc.telegram.start()
+    ]
     await Promise.all(ops)
     await new Promise((r) => setTimeout(r, 1500))
     expect(svc.telegram.status().state).toBe('RUNNING')
@@ -161,7 +217,13 @@ describe('Telegram lifecycle', () => {
     await svc.telegram.setToken(TOKEN)
     fake.forced409 = 2
     await svc.telegram.start()
-    await until(() => fake.forced409 === 0 && svc.telegram.status().conflictCount === 0 && !!svc.telegram.status().lastPollAt, 15000)
+    await until(
+      () =>
+        fake.forced409 === 0 &&
+        svc.telegram.status().conflictCount === 0 &&
+        !!svc.telegram.status().lastPollAt,
+      15000
+    )
     expect(svc.telegram.status().state).toBe('RUNNING')
     await svc.telegram.stop()
     fake.forced409 = 100
@@ -177,7 +239,14 @@ describe('Telegram authorization and callbacks', () => {
     const svc = await setup(fake)
     await svc.telegram.setToken(TOKEN)
     await svc.telegram.start()
-    fake.push({ message: { message_id: 1, chat: { id: 555, type: 'private' }, from: { id: 555, first_name: 'Stranger' }, text: '/start' } })
+    fake.push({
+      message: {
+        message_id: 1,
+        chat: { id: 555, type: 'private' },
+        from: { id: 555, first_name: 'Stranger' },
+        text: '/start'
+      }
+    })
     await until(() => fake.sent.length === 1)
     expect(fake.sent[0].text).toMatch(/not authorized/)
     expect(svc.telegram.status().pendingChats.map((c) => c.chatId)).toContain('555')

@@ -20,35 +20,95 @@ export function normalizePlace(text: string): string {
 
 /** US states + DC + territories: [code, name]. GeoNames uses the postal code as admin1 for the US. */
 export const US_STATES: [string, string][] = [
-  ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'],
-  ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'], ['DC', 'District of Columbia'], ['FL', 'Florida'],
-  ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'], ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'],
-  ['KS', 'Kansas'], ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'],
-  ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'], ['MO', 'Missouri'],
-  ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'], ['NH', 'New Hampshire'], ['NJ', 'New Jersey'],
-  ['NM', 'New Mexico'], ['NY', 'New York'], ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'],
-  ['OK', 'Oklahoma'], ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'],
-  ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'], ['VT', 'Vermont'],
-  ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
-  ['PR', 'Puerto Rico'], ['GU', 'Guam'], ['VI', 'Virgin Islands']
+  ['AL', 'Alabama'],
+  ['AK', 'Alaska'],
+  ['AZ', 'Arizona'],
+  ['AR', 'Arkansas'],
+  ['CA', 'California'],
+  ['CO', 'Colorado'],
+  ['CT', 'Connecticut'],
+  ['DE', 'Delaware'],
+  ['DC', 'District of Columbia'],
+  ['FL', 'Florida'],
+  ['GA', 'Georgia'],
+  ['HI', 'Hawaii'],
+  ['ID', 'Idaho'],
+  ['IL', 'Illinois'],
+  ['IN', 'Indiana'],
+  ['IA', 'Iowa'],
+  ['KS', 'Kansas'],
+  ['KY', 'Kentucky'],
+  ['LA', 'Louisiana'],
+  ['ME', 'Maine'],
+  ['MD', 'Maryland'],
+  ['MA', 'Massachusetts'],
+  ['MI', 'Michigan'],
+  ['MN', 'Minnesota'],
+  ['MS', 'Mississippi'],
+  ['MO', 'Missouri'],
+  ['MT', 'Montana'],
+  ['NE', 'Nebraska'],
+  ['NV', 'Nevada'],
+  ['NH', 'New Hampshire'],
+  ['NJ', 'New Jersey'],
+  ['NM', 'New Mexico'],
+  ['NY', 'New York'],
+  ['NC', 'North Carolina'],
+  ['ND', 'North Dakota'],
+  ['OH', 'Ohio'],
+  ['OK', 'Oklahoma'],
+  ['OR', 'Oregon'],
+  ['PA', 'Pennsylvania'],
+  ['RI', 'Rhode Island'],
+  ['SC', 'South Carolina'],
+  ['SD', 'South Dakota'],
+  ['TN', 'Tennessee'],
+  ['TX', 'Texas'],
+  ['UT', 'Utah'],
+  ['VT', 'Vermont'],
+  ['VA', 'Virginia'],
+  ['WA', 'Washington'],
+  ['WV', 'West Virginia'],
+  ['WI', 'Wisconsin'],
+  ['WY', 'Wyoming'],
+  ['PR', 'Puerto Rico'],
+  ['GU', 'Guam'],
+  ['VI', 'Virgin Islands']
 ]
 
 /** [postal abbreviation, GeoNames admin1 code, name] */
 export const CA_PROVINCES: [string, string, string][] = [
-  ['AB', '01', 'Alberta'], ['BC', '02', 'British Columbia'], ['MB', '03', 'Manitoba'], ['NB', '04', 'New Brunswick'],
-  ['NL', '05', 'Newfoundland and Labrador'], ['NS', '07', 'Nova Scotia'], ['ON', '08', 'Ontario'],
-  ['PE', '09', 'Prince Edward Island'], ['QC', '10', 'Quebec'], ['SK', '11', 'Saskatchewan'], ['YT', '12', 'Yukon'],
-  ['NT', '13', 'Northwest Territories'], ['NU', '14', 'Nunavut']
+  ['AB', '01', 'Alberta'],
+  ['BC', '02', 'British Columbia'],
+  ['MB', '03', 'Manitoba'],
+  ['NB', '04', 'New Brunswick'],
+  ['NL', '05', 'Newfoundland and Labrador'],
+  ['NS', '07', 'Nova Scotia'],
+  ['ON', '08', 'Ontario'],
+  ['PE', '09', 'Prince Edward Island'],
+  ['QC', '10', 'Quebec'],
+  ['SK', '11', 'Saskatchewan'],
+  ['YT', '12', 'Yukon'],
+  ['NT', '13', 'Northwest Territories'],
+  ['NU', '14', 'Nunavut']
 ]
 
 export const AU_STATES: [string, string, string][] = [
-  ['ACT', '01', 'Australian Capital Territory'], ['NSW', '02', 'New South Wales'], ['NT', '03', 'Northern Territory'],
-  ['QLD', '04', 'Queensland'], ['SA', '05', 'South Australia'], ['TAS', '06', 'Tasmania'], ['VIC', '07', 'Victoria'],
+  ['ACT', '01', 'Australian Capital Territory'],
+  ['NSW', '02', 'New South Wales'],
+  ['NT', '03', 'Northern Territory'],
+  ['QLD', '04', 'Queensland'],
+  ['SA', '05', 'South Australia'],
+  ['TAS', '06', 'Tasmania'],
+  ['VIC', '07', 'Victoria'],
   ['WA', '08', 'Western Australia']
 ]
 
 export const GB_NATIONS: [string, string][] = [
-  ['ENG', 'England'], ['SCT', 'Scotland'], ['WLS', 'Wales'], ['NIR', 'Northern Ireland']
+  ['ENG', 'England'],
+  ['SCT', 'Scotland'],
+  ['WLS', 'Wales'],
+  ['NIR', 'Northern Ireland']
 ]
 
 export interface RegionMatch {
@@ -86,7 +146,10 @@ export function lookupRegion(text: string): RegionMatch[] {
   return regionIndex.get(normalizePlace(text)) ?? []
 }
 
-export function regionName(country: string | undefined, admin1: string | undefined): string | undefined {
+export function regionName(
+  country: string | undefined,
+  admin1: string | undefined
+): string | undefined {
   if (!country || !admin1) return undefined
   if (country === 'US') return US_STATES.find(([c]) => c === admin1)?.[0]
   if (country === 'CA') return CA_PROVINCES.find(([, c]) => c === admin1)?.[0]
@@ -100,12 +163,42 @@ export function regionName(country: string | undefined, admin1: string | undefin
 // ---------------------------------------------------------------------------
 
 const COUNTRY_ALIASES: Record<string, string> = {
-  usa: 'US', 'u s a': 'US', 'u s': 'US', us: 'US', america: 'US', 'united states of america': 'US',
-  uk: 'GB', 'u k': 'GB', britain: 'GB', 'great britain': 'GB', england: 'GB', scotland: 'GB', wales: 'GB',
-  'northern ireland': 'GB', uae: 'AE', 'south korea': 'KR', korea: 'KR', 'north korea': 'KP', russia: 'RU',
-  'czech republic': 'CZ', czechia: 'CZ', holland: 'NL', 'the netherlands': 'NL', deutschland: 'DE',
-  espana: 'ES', 'hong kong': 'HK', 'ivory coast': 'CI', turkey: 'TR', turkiye: 'TR', vietnam: 'VN',
-  'viet nam': 'VN', 'mainland china': 'CN', prc: 'CN', taiwan: 'TW', 'the philippines': 'PH', ksa: 'SA'
+  usa: 'US',
+  'u s a': 'US',
+  'u s': 'US',
+  us: 'US',
+  america: 'US',
+  'united states of america': 'US',
+  uk: 'GB',
+  'u k': 'GB',
+  britain: 'GB',
+  'great britain': 'GB',
+  england: 'GB',
+  scotland: 'GB',
+  wales: 'GB',
+  'northern ireland': 'GB',
+  uae: 'AE',
+  'south korea': 'KR',
+  korea: 'KR',
+  'north korea': 'KP',
+  russia: 'RU',
+  'czech republic': 'CZ',
+  czechia: 'CZ',
+  holland: 'NL',
+  'the netherlands': 'NL',
+  deutschland: 'DE',
+  espana: 'ES',
+  'hong kong': 'HK',
+  'ivory coast': 'CI',
+  turkey: 'TR',
+  turkiye: 'TR',
+  vietnam: 'VN',
+  'viet nam': 'VN',
+  'mainland china': 'CN',
+  prc: 'CN',
+  taiwan: 'TW',
+  'the philippines': 'PH',
+  ksa: 'SA'
 }
 
 let countryIndex: Map<string, string> | null = null
@@ -130,7 +223,8 @@ function buildCountryIndex(): void {
       countryIndex.set(normalizePlace(name), code)
     }
   }
-  for (const [alias, code] of Object.entries(COUNTRY_ALIASES)) countryIndex.set(normalizePlace(alias), code)
+  for (const [alias, code] of Object.entries(COUNTRY_ALIASES))
+    countryIndex.set(normalizePlace(alias), code)
 }
 
 /** Resolves a country name, alias, or ISO alpha-2/alpha-3-ish code. Two-letter codes must be uppercase in the source. */
@@ -163,12 +257,146 @@ export function allCountries(): { code: string; name: string }[] {
 // Macro regions used by remote-work eligibility statements
 // ---------------------------------------------------------------------------
 
-const EU = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE']
-const EUROPE = [...EU, 'GB', 'NO', 'CH', 'IS', 'LI', 'AL', 'BA', 'ME', 'MK', 'RS', 'XK', 'MD', 'UA', 'BY', 'AD', 'MC', 'SM', 'VA', 'GI']
-const MIDDLE_EAST = ['AE', 'SA', 'QA', 'KW', 'BH', 'OM', 'IL', 'JO', 'LB', 'TR', 'EG', 'IQ', 'IR', 'YE', 'PS', 'SY']
-const AFRICA = ['ZA', 'NG', 'KE', 'EG', 'MA', 'GH', 'TN', 'DZ', 'ET', 'UG', 'TZ', 'RW', 'SN', 'CI', 'CM', 'ZW', 'ZM', 'BW', 'NA', 'MU', 'AO', 'MZ']
-const LATAM = ['MX', 'BR', 'AR', 'CL', 'CO', 'PE', 'UY', 'PY', 'BO', 'EC', 'VE', 'CR', 'PA', 'GT', 'HN', 'SV', 'NI', 'DO', 'CU', 'PR', 'JM', 'TT']
-const APAC = ['AU', 'NZ', 'JP', 'KR', 'CN', 'HK', 'TW', 'SG', 'MY', 'TH', 'VN', 'PH', 'ID', 'IN', 'PK', 'BD', 'LK', 'NP', 'KH', 'MM', 'MN']
+const EU = [
+  'AT',
+  'BE',
+  'BG',
+  'HR',
+  'CY',
+  'CZ',
+  'DK',
+  'EE',
+  'FI',
+  'FR',
+  'DE',
+  'GR',
+  'HU',
+  'IE',
+  'IT',
+  'LV',
+  'LT',
+  'LU',
+  'MT',
+  'NL',
+  'PL',
+  'PT',
+  'RO',
+  'SK',
+  'SI',
+  'ES',
+  'SE'
+]
+const EUROPE = [
+  ...EU,
+  'GB',
+  'NO',
+  'CH',
+  'IS',
+  'LI',
+  'AL',
+  'BA',
+  'ME',
+  'MK',
+  'RS',
+  'XK',
+  'MD',
+  'UA',
+  'BY',
+  'AD',
+  'MC',
+  'SM',
+  'VA',
+  'GI'
+]
+const MIDDLE_EAST = [
+  'AE',
+  'SA',
+  'QA',
+  'KW',
+  'BH',
+  'OM',
+  'IL',
+  'JO',
+  'LB',
+  'TR',
+  'EG',
+  'IQ',
+  'IR',
+  'YE',
+  'PS',
+  'SY'
+]
+const AFRICA = [
+  'ZA',
+  'NG',
+  'KE',
+  'EG',
+  'MA',
+  'GH',
+  'TN',
+  'DZ',
+  'ET',
+  'UG',
+  'TZ',
+  'RW',
+  'SN',
+  'CI',
+  'CM',
+  'ZW',
+  'ZM',
+  'BW',
+  'NA',
+  'MU',
+  'AO',
+  'MZ'
+]
+const LATAM = [
+  'MX',
+  'BR',
+  'AR',
+  'CL',
+  'CO',
+  'PE',
+  'UY',
+  'PY',
+  'BO',
+  'EC',
+  'VE',
+  'CR',
+  'PA',
+  'GT',
+  'HN',
+  'SV',
+  'NI',
+  'DO',
+  'CU',
+  'PR',
+  'JM',
+  'TT'
+]
+const APAC = [
+  'AU',
+  'NZ',
+  'JP',
+  'KR',
+  'CN',
+  'HK',
+  'TW',
+  'SG',
+  'MY',
+  'TH',
+  'VN',
+  'PH',
+  'ID',
+  'IN',
+  'PK',
+  'BD',
+  'LK',
+  'NP',
+  'KH',
+  'MM',
+  'MN'
+]
 
 export const MACRO_REGIONS: Record<string, string[]> = {
   'north-america': ['US', 'CA', 'MX'],

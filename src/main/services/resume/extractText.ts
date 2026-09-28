@@ -47,7 +47,9 @@ async function tryOcr(data: Buffer, warnings: string[]): Promise<string | null> 
     const modName = 'tesseract.js'
     tesseract = (await import(/* @vite-ignore */ modName)) as never
   } catch {
-    warnings.push('This PDF appears to be scanned (no selectable text). Optional OCR is not installed: run `npm install tesseract.js` and re-upload, or upload a DOCX / text-based PDF.')
+    warnings.push(
+      'This PDF appears to be scanned (no selectable text). Optional OCR is not installed: run `npm install tesseract.js` and re-upload, or upload a DOCX / text-based PDF.'
+    )
     return null
   }
   try {
@@ -64,7 +66,9 @@ async function tryOcr(data: Buffer, warnings: string[]): Promise<string | null> 
     return texts.join('\n')
   } catch (err) {
     log.warn('resume', `OCR failed: ${(err as Error).message}`)
-    warnings.push(`OCR failed (${(err as Error).message}). Upload a DOCX or text-based PDF instead.`)
+    warnings.push(
+      `OCR failed (${(err as Error).message}). Upload a DOCX or text-based PDF instead.`
+    )
     return null
   }
 }
@@ -75,13 +79,25 @@ export async function extractResumeText(fileName: string, data: Buffer): Promise
   if (!format) throw new Error('Unsupported file type. Upload a PDF, DOCX or TXT resume.')
   const warnings: string[] = []
   if (format === 'txt') {
-    return { text: data.toString('utf8').replace(/^﻿/, ''), format, needsOcr: false, ocrUsed: false, warnings }
+    return {
+      text: data.toString('utf8').replace(/^\uFEFF/, ''),
+      format,
+      needsOcr: false,
+      ocrUsed: false,
+      warnings
+    }
   }
   if (format === 'docx') {
     const mammoth = await import('mammoth')
     const res = await mammoth.extractRawText({ buffer: data })
     for (const m of res.messages ?? []) if (m.type === 'error') warnings.push(m.message)
-    return { text: res.value.replace(/\n{3,}/g, '\n\n').trim(), format, needsOcr: false, ocrUsed: false, warnings }
+    return {
+      text: res.value.replace(/\n{3,}/g, '\n\n').trim(),
+      format,
+      needsOcr: false,
+      ocrUsed: false,
+      warnings
+    }
   }
   const { text, pages } = await pdfText(data)
   const meaningful = text.replace(/\s+/g, '').length

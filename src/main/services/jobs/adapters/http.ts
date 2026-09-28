@@ -34,7 +34,12 @@ export class HttpError extends Error {
 
 export class RateLimitedError extends HttpError {
   constructor(url: string, retryAfterMs: number) {
-    super(`Rate limited by provider; retry after ${Math.ceil(retryAfterMs / 1000)}s`, 429, url, retryAfterMs)
+    super(
+      `Rate limited by provider; retry after ${Math.ceil(retryAfterMs / 1000)}s`,
+      429,
+      url,
+      retryAfterMs
+    )
     this.name = 'RateLimitedError'
   }
 }
@@ -64,7 +69,7 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       signal?.removeEventListener('abort', onAbort)
       resolve()
     }, ms)
-    const onAbort = () => {
+    const onAbort = (): void => {
       clearTimeout(t)
       reject(new CancelledError())
     }
@@ -104,7 +109,10 @@ export class HttpClient {
     const prev = this.hostQueues.get(host) ?? Promise.resolve()
     let release!: () => void
     const mine = new Promise<void>((r) => (release = r))
-    this.hostQueues.set(host, prev.then(() => mine))
+    this.hostQueues.set(
+      host,
+      prev.then(() => mine)
+    )
     await prev
     try {
       const wait = (this.hostLast.get(host) ?? 0) + interval - Date.now()
@@ -127,7 +135,11 @@ export class HttpClient {
       try {
         res = await this.fetchImpl(req.url, {
           method: req.method ?? 'GET',
-          headers: { 'User-Agent': this.opts.userAgent, Accept: 'application/json, text/html;q=0.9, */*;q=0.5', ...req.headers },
+          headers: {
+            'User-Agent': this.opts.userAgent,
+            Accept: 'application/json, text/html;q=0.9, */*;q=0.5',
+            ...req.headers
+          },
           body: req.body,
           signal,
           redirect: 'follow'
@@ -140,7 +152,11 @@ export class HttpClient {
           await sleep(this.backoff(attempt), req.signal)
           continue
         }
-        throw new HttpError(timedOut ? 'Request timed out' : `Network error: ${(err as Error).message}`, 0, req.url)
+        throw new HttpError(
+          timedOut ? 'Request timed out' : `Network error: ${(err as Error).message}`,
+          0,
+          req.url
+        )
       }
 
       if (res.ok || req.acceptStatuses?.includes(res.status)) {

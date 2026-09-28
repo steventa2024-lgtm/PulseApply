@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { EmploymentType } from '../../../../shared/types'
-import type { DraftJob, JobProvider, ProviderQuery, RawRecord } from './types'
+import type { DraftJob, JobProvider, ProviderQuery, ProviderSupport, RawRecord } from './types'
 import { isoFromString, isoFromUnix, matchesKeywords, num, str } from './types'
 import { MACRO_REGIONS } from '../geo/regions'
 
@@ -10,10 +10,12 @@ import { MACRO_REGIONS } from '../geo/regions'
  * they must never dominate a local, on-site search.
  */
 
-const remoteOnly = (q: ProviderQuery) =>
-  q.wantsRemote ? { ok: true } : { ok: false, reason: 'Remote-only board; remote work not requested' }
+const remoteOnly = (q: ProviderQuery): ProviderSupport =>
+  q.wantsRemote
+    ? { ok: true }
+    : { ok: false, reason: 'Remote-only board; remote work not requested' }
 
-const phrases = (q: ProviderQuery) => [q.keywords, ...q.alternateKeywords].filter(Boolean)
+const phrases = (q: ProviderQuery): string[] => [q.keywords, ...q.alternateKeywords].filter(Boolean)
 
 function employmentFrom(text: string | undefined): EmploymentType[] {
   const t = (text ?? '').toLowerCase().replace(/[_-]/g, ' ')
@@ -55,7 +57,8 @@ export const remoteOkProvider: JobProvider = {
   description: 'Public feed of remote jobs (mostly technology, some support/marketing).',
   markets: 'Remote roles, worldwide listings',
   docsUrl: 'https://remoteok.com/api',
-  termsNote: 'Remote OK requires linking back to the original listing and naming Remote OK as the source.',
+  termsNote:
+    'Remote OK requires linking back to the original listing and naming Remote OK as the source.',
   credentials: [],
   defaultEnabled: true,
   rateLimit: { minIntervalMs: 2000, note: 'Cached for 1 hour; one request per search.' },
@@ -65,7 +68,11 @@ export const remoteOkProvider: JobProvider = {
   supports: remoteOnly,
   isConfigured: () => true,
   async fetch(q, ctx) {
-    const data = await ctx.http.json<unknown[]>({ url: 'https://remoteok.com/api', signal: ctx.signal, timeoutMs: this.timeoutMs })
+    const data = await ctx.http.json<unknown[]>({
+      url: 'https://remoteok.com/api',
+      signal: ctx.signal,
+      timeoutMs: this.timeoutMs
+    })
     if (!Array.isArray(data)) throw new Error('Unexpected Remote OK response shape')
     const out: RawRecord[] = []
     for (const item of data) {
@@ -127,10 +134,14 @@ export const remotiveProvider: JobProvider = {
   description: 'Curated remote jobs across software, support, sales, marketing, design and more.',
   markets: 'Remote roles with stated candidate-location requirements',
   docsUrl: 'https://remotive.com/api-documentation',
-  termsNote: 'Remotive asks API users to link back to the listing, credit Remotive, and keep request volume low (results are cached for 6 hours).',
+  termsNote:
+    'Remotive asks API users to link back to the listing, credit Remotive, and keep request volume low (results are cached for 6 hours).',
   credentials: [],
   defaultEnabled: true,
-  rateLimit: { minIntervalMs: 5000, note: 'Cached for 6 hours per query to respect Remotive’s low-volume request policy.' },
+  rateLimit: {
+    minIntervalMs: 5000,
+    note: 'Cached for 6 hours per query to respect Remotive’s low-volume request policy.'
+  },
   cacheTtlMs: 6 * 60 * 60_000,
   timeoutMs: 20_000,
   hosts: ['remotive.com'],
@@ -194,7 +205,8 @@ export const arbeitnowProvider: JobProvider = {
   id: 'arbeitnow',
   name: 'Arbeitnow',
   kind: 'remote_board',
-  description: 'European job board (primarily Germany), on-site and remote, many with visa sponsorship.',
+  description:
+    'European job board (primarily Germany), on-site and remote, many with visa sponsorship.',
   markets: 'Germany and wider Europe',
   docsUrl: 'https://www.arbeitnow.com/blog/job-board-api',
   termsNote: 'Free API; link back to the Arbeitnow listing.',
@@ -208,7 +220,10 @@ export const arbeitnowProvider: JobProvider = {
     const eu = q.country ? MACRO_REGIONS.europe.includes(q.country) : false
     if (eu) return { ok: true }
     if (q.wantsRemote) return { ok: true }
-    return { ok: false, reason: 'Arbeitnow lists European jobs; your search location is outside Europe' }
+    return {
+      ok: false,
+      reason: 'Arbeitnow lists European jobs; your search location is outside Europe'
+    }
   },
   isConfigured: () => true,
   async fetch(q, ctx) {
@@ -280,11 +295,26 @@ const JobicyJob = z
 /** Jobicy dates look like "2024-05-01 10:00:00" (UTC). */
 function jobicyDate(value: string | undefined): string | undefined {
   if (!value) return undefined
-  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(value) ? value.replace(' ', 'T') + 'Z' : value
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(value)
+    ? value.replace(' ', 'T') + 'Z'
+    : value
   return isoFromString(iso)
 }
 
-const JOBICY_GEO: Record<string, string> = { US: 'usa', CA: 'canada', GB: 'uk', DE: 'germany', FR: 'france', ES: 'spain', NL: 'netherlands', AU: 'australia', BR: 'brazil', MX: 'mexico', IN: 'india', PL: 'poland' }
+const JOBICY_GEO: Record<string, string> = {
+  US: 'usa',
+  CA: 'canada',
+  GB: 'uk',
+  DE: 'germany',
+  FR: 'france',
+  ES: 'spain',
+  NL: 'netherlands',
+  AU: 'australia',
+  BR: 'brazil',
+  MX: 'mexico',
+  IN: 'india',
+  PL: 'poland'
+}
 
 export const jobicyProvider: JobProvider = {
   id: 'jobicy',
@@ -293,7 +323,8 @@ export const jobicyProvider: JobProvider = {
   description: 'Remote jobs with region eligibility (USA, UK, Europe, LATAM, APAC, anywhere).',
   markets: 'Remote roles with stated geographic eligibility',
   docsUrl: 'https://jobicy.com/jobs-rss-feed',
-  termsNote: 'Jobicy requires attribution and linking to the original listing; avoid frequent polling (cached 1 hour).',
+  termsNote:
+    'Jobicy requires attribution and linking to the original listing; avoid frequent polling (cached 1 hour).',
   credentials: [],
   defaultEnabled: true,
   rateLimit: { minIntervalMs: 2000, note: 'One request per search, cached for 1 hour.' },
@@ -335,7 +366,10 @@ export const jobicyProvider: JobProvider = {
       remoteEligibilityText: d.jobGeo ?? '',
       employmentTypes: employmentFrom(types),
       seniorityText: d.jobLevel,
-      salary: min || max ? { min, max, currency: str(d.salaryCurrency) ?? 'USD', period: 'year' } : undefined,
+      salary:
+        min || max
+          ? { min, max, currency: str(d.salaryCurrency) ?? 'USD', period: 'year' }
+          : undefined,
       postedAt: jobicyDate(d.pubDate),
       tags: Array.isArray(d.jobIndustry) ? d.jobIndustry : d.jobIndustry ? [d.jobIndustry] : [],
       employerDirect: false
@@ -378,7 +412,10 @@ export const himalayasProvider: JobProvider = {
   termsNote: 'Free API; link back to the Himalayas listing and credit Himalayas.',
   credentials: [],
   defaultEnabled: true,
-  rateLimit: { minIntervalMs: 1500, note: 'Up to 5 pages (20 jobs each) per search, cached for 1 hour.' },
+  rateLimit: {
+    minIntervalMs: 1500,
+    note: 'Up to 5 pages (20 jobs each) per search, cached for 1 hour.'
+  },
   cacheTtlMs: 60 * 60_000,
   timeoutMs: 20_000,
   hosts: ['himalayas.app'],

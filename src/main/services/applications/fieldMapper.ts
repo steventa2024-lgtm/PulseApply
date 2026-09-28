@@ -30,18 +30,42 @@ export type SensitiveCategory =
 
 const SENSITIVE: [RegExp, SensitiveCategory][] = [
   [/sponsor|visa|immigration|h-?1b|work permit status/i, 'sponsorship'],
-  [/(legally )?(authori[sz]ed|eligible|entitled|permitted|right) to work|work authori[sz]ation|employment eligibility|citizenship|citizen|permanent resident|green card/i, 'work_authorization'],
+  [
+    /(legally )?(authori[sz]ed|eligible|entitled|permitted|right) to work|work authori[sz]ation|employment eligibility|citizenship|citizen|permanent resident|green card/i,
+    'work_authorization'
+  ],
   [/convict|criminal|felony|misdemeanor|arrest|offen[cs]e/i, 'criminal_history'],
-  [/\bgender\b|\bsex\b|\brace\b|racial|ethnic|hispanic|latin[oax]|sexual orientation|transgender|pronoun|lgbt|nationality|religio|marital/i, 'demographic'],
+  [
+    /\bgender\b|\bsex\b|\brace\b|racial|ethnic|hispanic|latin[oax]|sexual orientation|transgender|pronoun|lgbt|nationality|religio|marital/i,
+    'demographic'
+  ],
   [/disabilit|accommodation|impairment/i, 'disability'],
   [/veteran|military|armed forces|protected veteran/i, 'veteran'],
-  [/date of birth|birth ?date|\bdob\b|your age|over (the age of )?(16|18|21)|at least (16|18|21)/i, 'age'],
+  [
+    /date of birth|birth ?date|\bdob\b|your age|over (the age of )?(16|18|21)|at least (16|18|21)/i,
+    'age'
+  ],
   [/background check|drug (test|screen)|credit check/i, 'background_check'],
-  [/salary|compensation|pay expectation|desired pay|expected pay|hourly rate expectation/i, 'salary'],
-  [/start date|available to start|availability|notice period|when can you start|shifts? (are you )?available|hours available/i, 'availability'],
-  [/years of (professional |relevant |work )?experience|how many years|how long have you/i, 'experience_years'],
-  [/i (agree|acknowledge|certify|confirm|consent|understand|attest)|terms|privacy (policy|notice)|consent|declar|attest|truthful|accurate and complete|gdpr/i, 'declaration'],
-  [/do you (have|hold|possess)|certificat|certified|licen[cs]e|forklift|cdl|food handler|servsafe|cpr|degree/i, 'certification']
+  [
+    /salary|compensation|pay expectation|desired pay|expected pay|hourly rate expectation/i,
+    'salary'
+  ],
+  [
+    /start date|available to start|availability|notice period|when can you start|shifts? (are you )?available|hours available/i,
+    'availability'
+  ],
+  [
+    /years of (professional |relevant |work )?experience|how many years|how long have you/i,
+    'experience_years'
+  ],
+  [
+    /i (agree|acknowledge|certify|confirm|consent|understand|attest)|terms|privacy (policy|notice)|consent|declar|attest|truthful|accurate and complete|gdpr/i,
+    'declaration'
+  ],
+  [
+    /do you (have|hold|possess)|certificat|certified|licen[cs]e|forklift|cdl|food handler|servsafe|cpr|degree/i,
+    'certification'
+  ]
 ]
 
 export function sensitiveCategory(label: string): SensitiveCategory | undefined {
@@ -71,7 +95,10 @@ const STANDARD: [RegExp, ProfileKey][] = [
   [/^(legal )?first[ _-]?name|given name|^first$|forename|prénom/i, 'firstName'],
   [/^(legal )?last[ _-]?name|surname|family name|^last$/i, 'lastName'],
   [/preferred (first )?name|nickname/i, 'preferredName'],
-  [/^(full |legal |your )?name\b(?!.*(company|employer|school|reference|manager))|^name\s*\*?$/i, 'fullName'],
+  [
+    /^(full |legal |your )?name\b(?!.*(company|employer|school|reference|manager))|^name\s*\*?$/i,
+    'fullName'
+  ],
   [/e-?mail/i, 'email'],
   [/phone|mobile|cell|telephone|contact number/i, 'phone'],
   [/linked ?in/i, 'linkedin'],
@@ -79,7 +106,10 @@ const STANDARD: [RegExp, ProfileKey][] = [
   [/website|portfolio|personal (site|url)|other url|blog/i, 'website'],
   [/^(current )?(city|town)\b/i, 'city'],
   [/(current )?location|address|where are you (based|located)|city,? state/i, 'location'],
-  [/current (company|employer)|most recent (company|employer)|^company$|^employer$|organization/i, 'currentCompany'],
+  [
+    /current (company|employer)|most recent (company|employer)|^company$|^employer$|organization/i,
+    'currentCompany'
+  ],
   [/current (job )?title|most recent (job )?title|current (role|position)/i, 'currentTitle'],
   [/resume|résumé|\bcv\b|curriculum/i, 'resume'],
   [/cover letter|motivation letter/i, 'coverLetter']
@@ -106,7 +136,10 @@ export interface MapperInput {
 }
 
 function norm(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
 }
 
 function pickYesNo(field: InspectedField, yes: boolean): number | undefined {
@@ -116,7 +149,9 @@ function pickYesNo(field: InspectedField, yes: boolean): number | undefined {
 
 function customAnswer(profile: CandidateProfile, label: string): string | undefined {
   const l = norm(label)
-  const hits = profile.customAnswers.filter((a) => a.approved && a.question.trim() && l.includes(norm(a.question)))
+  const hits = profile.customAnswers.filter(
+    (a) => a.approved && a.question.trim() && l.includes(norm(a.question))
+  )
   // Prefer the most specific (longest) matching question pattern.
   return hits.sort((a, b) => b.question.length - a.question.length)[0]?.answer
 }
@@ -130,18 +165,45 @@ function optionFor(field: InspectedField, answer: string): number | undefined {
   )
 }
 
-function actionForValue(field: InspectedField, value: string, profileKey: string): FillAction | FieldIssue {
+function actionForValue(
+  field: InspectedField,
+  value: string,
+  profileKey: string
+): FillAction | FieldIssue {
   if (field.kind === 'select' || field.kind === 'radio') {
     const idx = optionFor(field, value)
-    if (idx === undefined) return { label: field.label, reason: 'unknown_question', required: field.required, type: field.kind }
-    return { field, action: field.kind === 'select' ? 'select' : 'radio', value, optionIndex: idx, profileKey }
+    if (idx === undefined)
+      return {
+        label: field.label,
+        reason: 'unknown_question',
+        required: field.required,
+        type: field.kind
+      }
+    return {
+      field,
+      action: field.kind === 'select' ? 'select' : 'radio',
+      value,
+      optionIndex: idx,
+      profileKey
+    }
   }
   if (field.kind === 'checkbox') {
-    if (/^(yes|true|checked|agree)$/i.test(value.trim())) return { field, action: 'check', value: 'checked', profileKey }
-    return { label: field.label, reason: 'unknown_question', required: field.required, type: field.kind }
+    if (/^(yes|true|checked|agree)$/i.test(value.trim()))
+      return { field, action: 'check', value: 'checked', profileKey }
+    return {
+      label: field.label,
+      reason: 'unknown_question',
+      required: field.required,
+      type: field.kind
+    }
   }
   if (field.kind === 'checkbox-group' || field.kind === 'file') {
-    return { label: field.label, reason: 'unsupported_input', required: field.required, type: field.kind }
+    return {
+      label: field.label,
+      reason: 'unsupported_input',
+      required: field.required,
+      type: field.kind
+    }
   }
   return { field, action: 'fill', value, profileKey }
 }
@@ -178,9 +240,15 @@ export function mapFields(fields: InspectedField[], input: MapperInput): Mapping
     // ---- resume / cover letter uploads ----
     if (field.kind === 'file') {
       const isCover = /cover|motivation/i.test(label)
-      if (!isCover && (/resume|résumé|\bcv\b|curriculum|attach/i.test(label) || fields.filter((f) => f.kind === 'file').length === 1)) {
-        if (input.resumePath && !field.filled) actions.push({ field, action: 'upload', value: input.resumePath, profileKey: 'resume' })
-        else if (!input.resumePath) issues.push({ label, reason: 'no_profile_value', required: field.required, type: 'file' })
+      if (
+        !isCover &&
+        (/resume|résumé|\bcv\b|curriculum|attach/i.test(label) ||
+          fields.filter((f) => f.kind === 'file').length === 1)
+      ) {
+        if (input.resumePath && !field.filled)
+          actions.push({ field, action: 'upload', value: input.resumePath, profileKey: 'resume' })
+        else if (!input.resumePath)
+          issues.push({ label, reason: 'no_profile_value', required: field.required, type: 'file' })
       } else if (field.required && !field.filled) {
         issues.push({ label, reason: 'unknown_question', required: true, type: 'file' })
       }
@@ -191,7 +259,11 @@ export function mapFields(fields: InspectedField[], input: MapperInput): Mapping
     const category = sensitiveCategory(label)
     if (category) {
       let answer = custom
-      if (!answer && category === 'work_authorization' && profile.sensitive.allowAutofill.workAuthorization) {
+      if (
+        !answer &&
+        category === 'work_authorization' &&
+        profile.sensitive.allowAutofill.workAuthorization
+      ) {
         const v = profile.sensitive.authorizedToWork[input.jobCountry ?? 'US']
         if (v === 'yes' || v === 'no') answer = v
       }
@@ -204,7 +276,12 @@ export function mapFields(fields: InspectedField[], input: MapperInput): Mapping
         if (isIssue(a)) issues.push({ ...a, reason: 'sensitive_requires_user' })
         else actions.push(a)
       } else if (field.required || field.kind !== 'checkbox') {
-        issues.push({ label, reason: 'sensitive_requires_user', required: field.required, type: field.kind })
+        issues.push({
+          label,
+          reason: 'sensitive_requires_user',
+          required: field.required,
+          type: field.kind
+        })
       }
       continue
     }
@@ -220,7 +297,8 @@ export function mapFields(fields: InspectedField[], input: MapperInput): Mapping
     if (field.kind === 'email') key = 'email'
     if (field.kind === 'tel') key = 'phone'
     if (key === 'coverLetter' || key === 'resume') {
-      if (field.required) issues.push({ label, reason: 'unknown_question', required: true, type: field.kind })
+      if (field.required)
+        issues.push({ label, reason: 'unknown_question', required: true, type: field.kind })
       continue
     }
     const value = key && key !== 'custom' ? values[key] : undefined
@@ -237,10 +315,12 @@ export function mapFields(fields: InspectedField[], input: MapperInput): Mapping
       continue
     }
     if (key) {
-      if (field.required) issues.push({ label, reason: 'no_profile_value', required: true, type: field.kind })
+      if (field.required)
+        issues.push({ label, reason: 'no_profile_value', required: true, type: field.kind })
       continue
     }
-    if (field.required) issues.push({ label, reason: 'unknown_question', required: true, type: field.kind })
+    if (field.required)
+      issues.push({ label, reason: 'unknown_question', required: true, type: field.kind })
   }
   return { actions, issues }
 }

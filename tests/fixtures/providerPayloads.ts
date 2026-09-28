@@ -11,14 +11,17 @@ const filler = Array.from({ length: 48 }, (_, i) => ({
   created: '2026-09-20T10:00:00Z',
   redirect_url: `https://www.adzuna.com/land/ad/${6000 + i}`,
   company: { display_name: `Filler Co ${i}` },
-  location: { display_name: 'Los Angeles, California', area: ['US', 'California', 'Los Angeles County', 'Los Angeles'] },
+  location: {
+    display_name: 'Los Angeles, California',
+    area: ['US', 'California', 'Los Angeles County', 'Los Angeles']
+  },
   latitude: 34.05,
   longitude: -118.24,
   salary_is_predicted: '0'
 }))
 
 /** Page 1 is a full page of 50 (so the client must request page 2), page 2 has the rest. */
-export const adzunaPage = (page: number) => ({
+export const adzunaPage = (page: number): { count: number; results: unknown[] } => ({
   count: 51,
   results:
     page === 1
@@ -27,11 +30,15 @@ export const adzunaPage = (page: number) => ({
           {
             id: '5001',
             title: 'Warehouse Associate',
-            description: 'Pick, pack and ship orders using RF scanners. Forklift certification preferred. Lift up to 50 lbs.',
+            description:
+              'Pick, pack and ship orders using RF scanners. Forklift certification preferred. Lift up to 50 lbs.',
             created: '2026-09-20T10:00:00Z',
             redirect_url: 'https://www.adzuna.com/land/ad/5001?se=test',
             company: { display_name: 'Pacific Coast Logistics' },
-            location: { display_name: 'Carson, Los Angeles County', area: ['US', 'California', 'Los Angeles County', 'Carson'] },
+            location: {
+              display_name: 'Carson, Los Angeles County',
+              area: ['US', 'California', 'Los Angeles County', 'Carson']
+            },
             latitude: 33.8314,
             longitude: -118.282,
             salary_min: 41600,
@@ -47,7 +54,10 @@ export const adzunaPage = (page: number) => ({
             created: '2026-09-21T10:00:00Z',
             redirect_url: 'https://www.adzuna.com/land/ad/5002',
             company: { display_name: 'Westside Law Group' },
-            location: { display_name: 'Los Angeles, California', area: ['US', 'California', 'Los Angeles County', 'Los Angeles'] },
+            location: {
+              display_name: 'Los Angeles, California',
+              area: ['US', 'California', 'Los Angeles County', 'Los Angeles']
+            },
             latitude: 34.05,
             longitude: -118.24,
             salary_min: 60000,
@@ -60,11 +70,15 @@ export const adzunaPage = (page: number) => ({
             {
               id: '5003',
               title: 'Material Handler - Night Shift',
-              description: 'Material handler for our distribution center. Pallet jack experience. Night shift.',
+              description:
+                'Material handler for our distribution center. Pallet jack experience. Night shift.',
               created: '2026-09-22T10:00:00Z',
               redirect_url: 'https://www.adzuna.com/land/ad/5003',
               company: { display_name: 'Pacific Coast Logistics' },
-              location: { display_name: 'Riverside, California', area: ['US', 'California', 'Riverside County', 'Riverside'] },
+              location: {
+                display_name: 'Riverside, California',
+                area: ['US', 'California', 'Riverside County', 'Riverside']
+              },
               latitude: 33.9533,
               longitude: -117.3962,
               salary_is_predicted: '0'
@@ -87,7 +101,8 @@ export const remotiveBody = {
       publication_date: '2026-09-25T08:00:00',
       candidate_required_location: 'USA Only',
       salary: '$70,000 - $90,000',
-      description: '<p>Build React UIs.</p><h3>Requirements</h3><ul><li>React and TypeScript</li><li>HTML/CSS</li></ul><script>alert(1)</script>'
+      description:
+        '<p>Build React UIs.</p><h3>Requirements</h3><ul><li>React and TypeScript</li><li>HTML/CSS</li></ul><script>alert(1)</script>'
     },
     {
       id: 902,
@@ -113,7 +128,8 @@ export const greenhouseJobs = {
       requisition_id: 'REQ-100',
       location: { name: 'Carson, CA' },
       absolute_url: 'https://boards.greenhouse.io/examplelogistics/jobs/7001',
-      content: '&lt;p&gt;Pick and pack orders with RF scanners.&lt;/p&gt;&lt;h3&gt;Requirements&lt;/h3&gt;&lt;ul&gt;&lt;li&gt;Pallet jack&lt;/li&gt;&lt;/ul&gt;',
+      content:
+        '&lt;p&gt;Pick and pack orders with RF scanners.&lt;/p&gt;&lt;h3&gt;Requirements&lt;/h3&gt;&lt;ul&gt;&lt;li&gt;Pallet jack&lt;/li&gt;&lt;/ul&gt;',
       departments: [{ name: 'Operations' }],
       offices: [{ name: 'Carson', location: 'Carson, CA' }]
     },
@@ -148,7 +164,9 @@ export const leverPostings = [
     workplaceType: 'on-site',
     categories: { commitment: 'Part-time', location: 'Long Beach, CA', team: 'Cafe' },
     description: '<p>Make espresso drinks, steam milk, handle POS and cash.</p>',
-    lists: [{ text: 'Requirements', content: '<li>Food handler card</li><li>Customer service</li>' }],
+    lists: [
+      { text: 'Requirements', content: '<li>Food handler card</li><li>Customer service</li>' }
+    ],
     salaryRange: { min: 19, max: 22, currency: 'USD', interval: 'per-hour-wage' }
   }
 ]
@@ -165,15 +183,33 @@ export const usajobsBody = {
           PositionURI: 'https://www.usajobs.gov/job/800001',
           ApplyURI: ['https://www.usajobs.gov/job/800001/apply'],
           PositionLocationDisplay: 'Torrance, California',
-          PositionLocation: [{ LocationName: 'Torrance, California', CountryCode: 'United States', CountrySubDivisionCode: 'California', CityName: 'Torrance, California', Longitude: -118.3406, Latitude: 33.8358 }],
+          PositionLocation: [
+            {
+              LocationName: 'Torrance, California',
+              CountryCode: 'United States',
+              CountrySubDivisionCode: 'California',
+              CityName: 'Torrance, California',
+              Longitude: -118.3406,
+              Latitude: 33.8358
+            }
+          ],
           OrganizationName: 'Defense Logistics Agency',
           DepartmentName: 'Department of Defense',
           PositionSchedule: [{ Name: 'Full-time' }],
-          PositionRemuneration: [{ MinimumRange: '22.10', MaximumRange: '25.80', RateIntervalCode: 'PH' }],
+          PositionRemuneration: [
+            { MinimumRange: '22.10', MaximumRange: '25.80', RateIntervalCode: 'PH' }
+          ],
           PublicationStartDate: '2026-09-15T00:00:00.0000',
           ApplicationCloseDate: '2099-10-15T23:59:59.9970',
           QualificationSummary: 'Experience operating forklifts and pallet jacks.',
-          UserArea: { Details: { JobSummary: 'Receive, store and issue materials.', WhoMayApply: { Name: 'United States Citizens' }, TeleworkEligible: false, RemoteIndicator: false } }
+          UserArea: {
+            Details: {
+              JobSummary: 'Receive, store and issue materials.',
+              WhoMayApply: { Name: 'United States Citizens' },
+              TeleworkEligible: false,
+              RemoteIndicator: false
+            }
+          }
         }
       }
     ]

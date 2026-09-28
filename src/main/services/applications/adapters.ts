@@ -21,7 +21,11 @@ async function clickApplyIfNeeded(page: Page): Promise<void> {
   const insp = await inspectPage(page)
   const meaningful = insp.fields.filter((f) => f.kind !== 'checkbox' && f.kind !== 'checkbox-group')
   if (meaningful.length >= 2 || !insp.applyButton) return
-  await page.locator(`[data-pa-button="${insp.applyButton.key}"]`).first().click({ timeout: 10_000 }).catch(() => undefined)
+  await page
+    .locator(`[data-pa-button="${insp.applyButton.key}"]`)
+    .first()
+    .click({ timeout: 10_000 })
+    .catch(() => undefined)
   await page.waitForLoadState('domcontentloaded', { timeout: 20_000 }).catch(() => undefined)
   await page.waitForTimeout(800)
 }
@@ -29,7 +33,9 @@ async function clickApplyIfNeeded(page: Page): Promise<void> {
 export const greenhouseAdapter: ApplicationAdapter = {
   id: 'greenhouse',
   label: 'Greenhouse',
-  notes: ['Some Greenhouse forms include reCAPTCHA or custom questions that you must answer yourself.'],
+  notes: [
+    'Some Greenhouse forms include reCAPTCHA or custom questions that you must answer yourself.'
+  ],
   async prepare(page) {
     await clickApplyIfNeeded(page)
   }
@@ -38,11 +44,19 @@ export const greenhouseAdapter: ApplicationAdapter = {
 export const leverAdapter: ApplicationAdapter = {
   id: 'lever',
   label: 'Lever',
-  notes: ['Lever forms usually run an hCaptcha check when you submit; you may need to complete it in the browser.'],
+  notes: [
+    'Lever forms usually run an hCaptcha check when you submit; you may need to complete it in the browser.'
+  ],
   async prepare(page) {
     const url = new URL(page.url())
-    if (url.hostname.endsWith('lever.co') && !/\/apply\/?$/.test(url.pathname) && /^\/[^/]+\/[0-9a-f-]{36}\/?$/i.test(url.pathname)) {
-      await page.goto(`${url.origin}${url.pathname.replace(/\/$/, '')}/apply`, { waitUntil: 'domcontentloaded' })
+    if (
+      url.hostname.endsWith('lever.co') &&
+      !/\/apply\/?$/.test(url.pathname) &&
+      /^\/[^/]+\/[0-9a-f-]{36}\/?$/i.test(url.pathname)
+    ) {
+      await page.goto(`${url.origin}${url.pathname.replace(/\/$/, '')}/apply`, {
+        waitUntil: 'domcontentloaded'
+      })
       return
     }
     await clickApplyIfNeeded(page)
@@ -52,11 +66,15 @@ export const leverAdapter: ApplicationAdapter = {
 export const ashbyAdapter: ApplicationAdapter = {
   id: 'ashby',
   label: 'Ashby',
-  notes: ['Ashby renders its form with JavaScript; PulseApply waits for it to load. Some boards use reCAPTCHA.'],
+  notes: [
+    'Ashby renders its form with JavaScript; PulseApply waits for it to load. Some boards use reCAPTCHA.'
+  ],
   async prepare(page) {
     const url = new URL(page.url())
     if (url.hostname === 'jobs.ashbyhq.com' && /^\/[^/]+\/[0-9a-f-]{36}\/?$/i.test(url.pathname)) {
-      await page.goto(`${url.origin}${url.pathname.replace(/\/$/, '')}/application`, { waitUntil: 'domcontentloaded' })
+      await page.goto(`${url.origin}${url.pathname.replace(/\/$/, '')}/application`, {
+        waitUntil: 'domcontentloaded'
+      })
     }
     await page.waitForSelector('input, textarea', { timeout: 20_000 }).catch(() => undefined)
     await clickApplyIfNeeded(page)
@@ -66,7 +84,9 @@ export const ashbyAdapter: ApplicationAdapter = {
 export const smartRecruitersAdapter: ApplicationAdapter = {
   id: 'smartrecruiters',
   label: 'SmartRecruiters',
-  notes: ['SmartRecruiters often requires email verification or sign-in partway through; PulseApply pauses for you when that happens.'],
+  notes: [
+    'SmartRecruiters often requires email verification or sign-in partway through; PulseApply pauses for you when that happens.'
+  ],
   async prepare(page) {
     await clickApplyIfNeeded(page)
     await page.waitForSelector('input, textarea', { timeout: 20_000 }).catch(() => undefined)
@@ -76,7 +96,9 @@ export const smartRecruitersAdapter: ApplicationAdapter = {
 export const genericAdapter: ApplicationAdapter = {
   id: 'generic',
   label: 'Generic form',
-  notes: ['Unrecognised application site: fields are detected from their labels. Review every field before approving.'],
+  notes: [
+    'Unrecognised application site: fields are detected from their labels. Review every field before approving.'
+  ],
   async prepare(page) {
     await clickApplyIfNeeded(page)
   }
@@ -84,13 +106,31 @@ export const genericAdapter: ApplicationAdapter = {
 
 /** Platforms that need an account/login or heavy multi-step flows we cannot automate reliably. */
 const MANUAL_PLATFORMS: [RegExp, string][] = [
-  [/myworkdayjobs\.com|workday\.com/i, 'Workday requires creating an account and signing in; complete this application manually.'],
-  [/icims\.com/i, 'iCIMS portals usually require an account and multi-step flows; complete this application manually.'],
+  [
+    /myworkdayjobs\.com|workday\.com/i,
+    'Workday requires creating an account and signing in; complete this application manually.'
+  ],
+  [
+    /icims\.com/i,
+    'iCIMS portals usually require an account and multi-step flows; complete this application manually.'
+  ],
   [/taleo\.net/i, 'Taleo requires an account; complete this application manually.'],
-  [/workforcenow\.adp\.com|recruiting\.adp\.com/i, 'ADP Recruiting requires sign-in; complete this application manually.'],
-  [/successfactors\.(com|eu)|jobs\.sap\.com/i, 'SAP SuccessFactors requires an account; complete this application manually.'],
-  [/oraclecloud\.com/i, 'Oracle Recruiting Cloud requires email verification; complete this application manually.'],
-  [/linkedin\.com|indeed\.com|ziprecruiter\.com|glassdoor\.com/i, 'This site requires signing in and does not permit automated applications; continue manually in the browser.']
+  [
+    /workforcenow\.adp\.com|recruiting\.adp\.com/i,
+    'ADP Recruiting requires sign-in; complete this application manually.'
+  ],
+  [
+    /successfactors\.(com|eu)|jobs\.sap\.com/i,
+    'SAP SuccessFactors requires an account; complete this application manually.'
+  ],
+  [
+    /oraclecloud\.com/i,
+    'Oracle Recruiting Cloud requires email verification; complete this application manually.'
+  ],
+  [
+    /linkedin\.com|indeed\.com|ziprecruiter\.com|glassdoor\.com/i,
+    'This site requires signing in and does not permit automated applications; continue manually in the browser.'
+  ]
 ]
 
 export function manualReason(url: string): string | undefined {
@@ -122,7 +162,11 @@ export function adapterFor(url: string): ApplicationAdapter {
 
 /** HTML for the explicitly labelled development/demo form. Never used for real jobs. */
 export function demoFormHtml(title: string, company: string): string {
-  const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+  const esc = (s: string): string =>
+    s.replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!
+    )
   return `<!doctype html><html><head><meta charset="utf-8"><title>DEMO — not a real application</title>
 <style>body{font-family:system-ui;background:#0f172a;color:#e2e8f0;padding:32px}form{max-width:560px;margin:auto;background:#1e293b;padding:24px;border-radius:12px}
 label{display:block;margin-top:12px;font-size:13px}input,select{width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid #475569;background:#0f172a;color:#fff}

@@ -26,7 +26,10 @@ export class MatchingService {
     return buildCandidateModel(profile, text, location)
   }
 
-  async scoreAll<T extends NormalizedJob & { geo?: ScoredJob['geo'] }>(jobs: T[], signal?: AbortSignal): Promise<Map<string, ReturnType<typeof scoreMatch>>> {
+  async scoreAll<T extends NormalizedJob & { geo?: ScoredJob['geo'] }>(
+    jobs: T[],
+    signal?: AbortSignal
+  ): Promise<Map<string, ReturnType<typeof scoreMatch>>> {
     const cand = this.candidate()
     const out = new Map<string, ReturnType<typeof scoreMatch>>()
     if (cand.empty) return out
@@ -35,15 +38,27 @@ export class MatchingService {
     for (const j of jobs) out.set(j.id, scoreMatch(j, cand, { geo: j.geo, weights }))
     const status = await this.embeddings.checkStatus()
     if (!status.active || !cand.embeddingText) return out
-    const ranked = [...jobs].sort((a, b) => (out.get(b.id)?.score ?? 0) - (out.get(a.id)?.score ?? 0)).slice(0, 150)
-    const texts = [cand.embeddingText, ...ranked.map((j) => `${j.title}\n${j.company}\n${j.description.slice(0, 1500)}`)]
+    const ranked = [...jobs]
+      .sort((a, b) => (out.get(b.id)?.score ?? 0) - (out.get(a.id)?.score ?? 0))
+      .slice(0, 150)
+    const texts = [
+      cand.embeddingText,
+      ...ranked.map((j) => `${j.title}\n${j.company}\n${j.description.slice(0, 1500)}`)
+    ]
     const vecs = await this.embeddings.embed(texts, signal)
     const cv = vecs[0]
     if (!cv) return out
     ranked.forEach((j, i) => {
       const v = vecs[i + 1]
       if (!v) return
-      out.set(j.id, scoreMatch(j, cand, { geo: j.geo, weights, semantic: { similarity: similarityScore(cosine(cv, v)), model: status.model } }))
+      out.set(
+        j.id,
+        scoreMatch(j, cand, {
+          geo: j.geo,
+          weights,
+          semantic: { similarity: similarityScore(cosine(cv, v)), model: status.model }
+        })
+      )
     })
     return out
   }

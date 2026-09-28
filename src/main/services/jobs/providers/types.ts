@@ -35,7 +35,12 @@ export interface ProviderContext {
   employers: EmployerRecord[]
   signal: AbortSignal
   contactEmail?: string
-  onEmployerSynced?(employerId: string, status: EmployerRecord['status'], detail: string | null, count?: number): void
+  onEmployerSynced?(
+    employerId: string,
+    status: EmployerRecord['status'],
+    detail: string | null,
+    count?: number
+  ): void
 }
 
 export interface RawRecord {
@@ -114,7 +119,10 @@ export interface JobProvider {
   normalize(record: RawRecord): DraftJob | null
 }
 
-export function missingCredentials(p: JobProvider, secret: (k: string) => string | undefined): string[] {
+export function missingCredentials(
+  p: JobProvider,
+  secret: (k: string) => string | undefined
+): string[] {
   return p.credentials.filter((c) => c.required && !secret(c.key)).map((c) => c.label)
 }
 
@@ -140,14 +148,23 @@ export function str(value: unknown): string | undefined {
 
 export function num(value: unknown): number | undefined {
   const n = typeof value === 'string' ? Number(value.replace(/[, ]/g, '')) : Number(value)
-  return typeof value !== 'boolean' && value !== null && value !== '' && Number.isFinite(n) && n > 0 ? n : undefined
+  return typeof value !== 'boolean' && value !== null && value !== '' && Number.isFinite(n) && n > 0
+    ? n
+    : undefined
 }
 
 /** Client-side keyword filter for boards without server-side search. */
 export function matchesKeywords(text: string, phrases: string[]): boolean {
   const lower = ` ${text.toLowerCase().replace(/[^a-z0-9+#]+/g, ' ')} `
   return phrases.some((p) => {
-    const words = p.toLowerCase().replace(/[^a-z0-9+#]+/g, ' ').trim().split(' ').filter((w) => w.length > 1)
-    return words.length > 0 && words.every((w) => lower.includes(` ${w} `) || lower.includes(` ${w}s `))
+    const words = p
+      .toLowerCase()
+      .replace(/[^a-z0-9+#]+/g, ' ')
+      .trim()
+      .split(' ')
+      .filter((w) => w.length > 1)
+    return (
+      words.length > 0 && words.every((w) => lower.includes(` ${w} `) || lower.includes(` ${w}s `))
+    )
   })
 }

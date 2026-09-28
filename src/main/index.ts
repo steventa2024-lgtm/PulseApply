@@ -28,7 +28,11 @@ class SafeStorageCipher implements SecretCipher {
   readonly level: SecretCipher['level']
   constructor() {
     if (!safeStorage.isEncryptionAvailable()) this.level = 'unavailable'
-    else if (process.platform === 'linux' && safeStorage.getSelectedStorageBackend?.() === 'basic_text') this.level = 'basic'
+    else if (
+      process.platform === 'linux' &&
+      safeStorage.getSelectedStorageBackend?.() === 'basic_text'
+    )
+      this.level = 'basic'
     else this.level = 'os'
   }
   encrypt(plain: string): string {
@@ -45,7 +49,10 @@ function send(channel: string, payload: unknown): void {
 
 function resourcesDir(): string {
   // out/main/index.js -> <app>/resources (inside app.asar, unpacked via asarUnpack when packaged)
-  const candidates = [join(__dirname, '../../resources'), join(process.resourcesPath ?? '', 'app.asar.unpacked', 'resources')]
+  const candidates = [
+    join(__dirname, '../../resources'),
+    join(process.resourcesPath ?? '', 'app.asar.unpacked', 'resources')
+  ]
   return candidates.find((c) => fs.existsSync(join(c, 'geo', 'cities.json.gz'))) ?? candidates[0]
 }
 
@@ -80,7 +87,11 @@ function createWindow(): void {
     return { action: 'deny' }
   })
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowed = (is.dev && process.env['ELECTRON_RENDERER_URL'] && url.startsWith(process.env['ELECTRON_RENDERER_URL'])) || url.startsWith('file://')
+    const allowed =
+      (is.dev &&
+        process.env['ELECTRON_RENDERER_URL'] &&
+        url.startsWith(process.env['ELECTRON_RENDERER_URL'])) ||
+      url.startsWith('file://')
     if (!allowed) event.preventDefault()
   })
 
@@ -104,14 +115,27 @@ function registerIpc(svc: Services): void {
         return res.canceled || !res.filePaths[0] ? null : res.filePaths[0]
       },
       async saveJsonFile(defaultName, content) {
-        const res = await dialog.showSaveDialog({ title: 'Export profile', defaultPath: defaultName, filters: [{ name: 'JSON', extensions: ['json'] }] })
+        const res = await dialog.showSaveDialog({
+          title: 'Export profile',
+          defaultPath: defaultName,
+          filters: [{ name: 'JSON', extensions: ['json'] }]
+        })
         if (res.canceled || !res.filePath) return null
         fs.writeFileSync(res.filePath, content, { mode: 0o600 })
         return res.filePath
       },
       async confirm(message, detail) {
-        const opts = { type: 'warning' as const, buttons: ['Cancel', 'Delete'], defaultId: 0, cancelId: 0, message, detail }
-        const res = mainWindow ? await dialog.showMessageBox(mainWindow, opts) : await dialog.showMessageBox(opts)
+        const opts = {
+          type: 'warning' as const,
+          buttons: ['Cancel', 'Delete'],
+          defaultId: 0,
+          cancelId: 0,
+          message,
+          detail
+        }
+        const res = mainWindow
+          ? await dialog.showMessageBox(mainWindow, opts)
+          : await dialog.showMessageBox(opts)
         return res.response === 1
       },
       async openExternal(url) {
@@ -126,8 +150,13 @@ function registerIpc(svc: Services): void {
     ipcMain.handle(channel, async (event, payload): Promise<IpcEnvelope<unknown>> => {
       // Only our own renderer may call privileged handlers.
       const origin = event.senderFrame?.url ?? ''
-      const trusted = origin.startsWith('file://') || (is.dev && !!process.env['ELECTRON_RENDERER_URL'] && origin.startsWith(process.env['ELECTRON_RENDERER_URL']))
-      if (!trusted || event.sender !== mainWindow?.webContents) return { ok: false, error: 'Untrusted sender' }
+      const trusted =
+        origin.startsWith('file://') ||
+        (is.dev &&
+          !!process.env['ELECTRON_RENDERER_URL'] &&
+          origin.startsWith(process.env['ELECTRON_RENDERER_URL']))
+      if (!trusted || event.sender !== mainWindow?.webContents)
+        return { ok: false, error: 'Untrusted sender' }
       try {
         const input = validatePayload(channel as IpcChannel, payload)
         const handler = handlers[channel as IpcChannel] as (p: unknown) => Promise<unknown>
@@ -158,7 +187,7 @@ async function bootstrap(): Promise<void> {
 
   void services.telegram.resumeIfEnabled()
   services.scheduler.start()
-  const housekeeping = () => {
+  const housekeeping = (): void => {
     if (!services) return
     services.store.jobs.markExpired()
     services.store.jobs.markStale(services.store.settings.get().staleAfterDays)
@@ -183,17 +212,20 @@ if (!app.requestSingleInstanceLock()) {
     }
   })
 
-  app.whenReady().then(bootstrap).catch((err) => {
-    log.error('startup', err)
-    dialog.showErrorBox('PulseApply failed to start', redact((err as Error).message))
-    app.quit()
-  })
+  app
+    .whenReady()
+    .then(bootstrap)
+    .catch((err) => {
+      log.error('startup', err)
+      dialog.showErrorBox('PulseApply failed to start', redact((err as Error).message))
+      app.quit()
+    })
 
   app.on('before-quit', (event) => {
     if (quitting || !services) return
     event.preventDefault()
     quitting = true
-    const done = () => app.quit()
+    const done = (): void => app.quit()
     Promise.race([services.shutdown(), new Promise((r) => setTimeout(r, 8000))])
       .catch((err) => log.error('shutdown', err))
       .finally(done)

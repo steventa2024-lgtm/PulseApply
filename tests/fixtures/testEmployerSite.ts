@@ -11,7 +11,10 @@ export interface Submission {
   files: string[]
 }
 
-function parseMultipart(body: Buffer, contentType: string): { fields: Record<string, string>; files: string[] } {
+function parseMultipart(
+  body: Buffer,
+  contentType: string
+): { fields: Record<string, string>; files: string[] } {
   const fields: Record<string, string> = {}
   const files: string[] = []
   const m = /boundary=(?:"([^"]+)"|([^;]+))/.exec(contentType)
@@ -31,10 +34,10 @@ function parseMultipart(body: Buffer, contentType: string): { fields: Record<str
   return { fields, files }
 }
 
-const layout = (title: string, body: string) =>
+const layout = (title: string, body: string): string =>
   `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${body}</body></html>`
 
-const GH_FORM = (errors: string[] = []) =>
+const GH_FORM = (errors: string[] = []): string =>
   layout(
     'Warehouse Associate - Test Employer',
     `<h1>Warehouse Associate</h1>
@@ -60,11 +63,15 @@ ${errors.length ? `<div role="alert" class="error">${errors.join('<br>')}</div>`
 </form>`
   )
 
-export async function startTestEmployerSite(): Promise<{ url: string; submissions: Submission[]; close: () => Promise<void> }> {
+export async function startTestEmployerSite(): Promise<{
+  url: string
+  submissions: Submission[]
+  close: () => Promise<void>
+}> {
   const submissions: Submission[] = []
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
-    const send = (status: number, html: string, headers: Record<string, string> = {}) => {
+    const send = (status: number, html: string, headers: Record<string, string> = {}): void => {
       res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', ...headers })
       res.end(html)
     }
@@ -72,11 +79,22 @@ export async function startTestEmployerSite(): Promise<{ url: string; submission
       const chunks: Buffer[] = []
       req.on('data', (c) => chunks.push(c))
       req.on('end', () => {
-        const { fields, files } = parseMultipart(Buffer.concat(chunks), req.headers['content-type'] ?? '')
+        const { fields, files } = parseMultipart(
+          Buffer.concat(chunks),
+          req.headers['content-type'] ?? ''
+        )
         submissions.push({ path: url.pathname, fields, files })
         if (url.pathname === '/gh/submit') {
-          const missing = ['first_name', 'last_name', 'email', 'q_auth', 'q_sponsor', 'q_forklift'].filter((k) => !fields[k])
-          if (missing.length || files.length === 0) return send(200, GH_FORM([`Missing: ${missing.join(', ') || 'resume'}`]))
+          const missing = [
+            'first_name',
+            'last_name',
+            'email',
+            'q_auth',
+            'q_sponsor',
+            'q_forklift'
+          ].filter((k) => !fields[k])
+          if (missing.length || files.length === 0)
+            return send(200, GH_FORM([`Missing: ${missing.join(', ') || 'resume'}`]))
           return send(303, '', { location: '/gh/confirmation' })
         }
         if (url.pathname === '/generic/submit') {
@@ -92,8 +110,19 @@ export async function startTestEmployerSite(): Promise<{ url: string; submission
             )
           )
         }
-        if (url.pathname === '/ambiguous/submit') return send(200, layout('Processing', '<h1>We are processing your request.</h1><p>Please wait.</p>'))
-        if (url.pathname === '/multi/submit') return send(200, layout('Done', '<h1>Thank you for applying!</h1><p>Your application has been received.</p>'))
+        if (url.pathname === '/ambiguous/submit')
+          return send(
+            200,
+            layout('Processing', '<h1>We are processing your request.</h1><p>Please wait.</p>')
+          )
+        if (url.pathname === '/multi/submit')
+          return send(
+            200,
+            layout(
+              'Done',
+              '<h1>Thank you for applying!</h1><p>Your application has been received.</p>'
+            )
+          )
         return send(404, 'not found')
       })
       return
@@ -102,7 +131,13 @@ export async function startTestEmployerSite(): Promise<{ url: string; submission
       case '/gh/jobs/1':
         return send(200, GH_FORM())
       case '/gh/confirmation':
-        return send(200, layout('Application submitted', '<h1>Thank you for applying!</h1><p>Your application has been submitted. Application ID: GH-48213</p>'))
+        return send(
+          200,
+          layout(
+            'Application submitted',
+            '<h1>Thank you for applying!</h1><p>Your application has been submitted. Application ID: GH-48213</p>'
+          )
+        )
       case '/generic/apply':
         return send(
           200,
@@ -117,7 +152,10 @@ export async function startTestEmployerSite(): Promise<{ url: string; submission
       case '/ambiguous/apply':
         return send(
           200,
-          layout('Apply', `<form method="post" action="/ambiguous/submit"><label for="n">Name *</label><input id="n" name="n" required><label for="e">Email *</label><input id="e" name="e" type="email" required><button type="submit">Submit application</button></form>`)
+          layout(
+            'Apply',
+            `<form method="post" action="/ambiguous/submit"><label for="n">Name *</label><input id="n" name="n" required><label for="e">Email *</label><input id="e" name="e" type="email" required><button type="submit">Submit application</button></form>`
+          )
         )
       case '/captcha/apply':
         return send(
@@ -131,15 +169,27 @@ export async function startTestEmployerSite(): Promise<{ url: string; submission
       case '/multi/1':
         return send(
           200,
-          layout('Step 1', `<form method="get" action="/multi/2"><label for="fn">First name *</label><input id="fn" name="fn" required><label for="ln">Last name *</label><input id="ln" name="ln" required><button type="submit">Next</button></form>`)
+          layout(
+            'Step 1',
+            `<form method="get" action="/multi/2"><label for="fn">First name *</label><input id="fn" name="fn" required><label for="ln">Last name *</label><input id="ln" name="ln" required><button type="submit">Next</button></form>`
+          )
         )
       case '/multi/2':
         return send(
           200,
-          layout('Step 2', `<form method="post" action="/multi/submit" enctype="multipart/form-data"><label for="cv">Upload your resume *</label><input id="cv" name="cv" type="file" required><button type="submit">Submit application</button></form>`)
+          layout(
+            'Step 2',
+            `<form method="post" action="/multi/submit" enctype="multipart/form-data"><label for="cv">Upload your resume *</label><input id="cv" name="cv" type="file" required><button type="submit">Submit application</button></form>`
+          )
         )
       case '/login':
-        return send(200, layout('Sign in', `<form><label for="u">Email</label><input id="u" type="email"><label for="p">Password</label><input id="p" type="password"><button>Sign in</button></form>`))
+        return send(
+          200,
+          layout(
+            'Sign in',
+            `<form><label for="u">Email</label><input id="u" type="email"><label for="p">Password</label><input id="p" type="password"><button>Sign in</button></form>`
+          )
+        )
     }
     return send(404, layout('Not found', 'not found'))
   })

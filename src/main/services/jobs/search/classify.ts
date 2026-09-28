@@ -30,14 +30,17 @@ const PHRASES: TitlePhrase[] = OCCUPATIONS.flatMap((o) =>
   })
 ).sort((a, b) => b.words - a.words || b.phrase.length - a.phrase.length)
 
-function bestPhraseMatch(normalized: string): { occ: string; words: number; index: number } | undefined {
+function bestPhraseMatch(
+  normalized: string
+): { occ: string; words: number; index: number } | undefined {
   let best: { occ: string; words: number; index: number } | undefined
   for (const p of PHRASES) {
     if (best && p.words < best.words) break
     const idx = normalized.lastIndexOf(` ${p.phrase} `)
     if (idx < 0) continue
     // Among equally long phrases prefer the later one (English head noun: "Warehouse Cashier" -> cashier).
-    if (!best || p.words > best.words || idx > best.index) best = { occ: p.occ, words: p.words, index: idx }
+    if (!best || p.words > best.words || idx > best.index)
+      best = { occ: p.occ, words: p.words, index: idx }
   }
   return best
 }
@@ -58,7 +61,28 @@ export function classifyJob(title: string, description = ''): OccupationTag | un
   const counts = new Map<string, number>()
   for (const p of PHRASES) {
     // Single generic words in descriptions ("server", "developer") are too noisy.
-    if (p.words < 2 && !['barista', 'cashier', 'paralegal', 'bartender', 'housekeeper', 'janitor', 'custodian', 'phlebotomist', 'caregiver', 'receptionist', 'bookkeeper', 'dishwasher', 'electrician', 'plumber', 'welder', 'machinist'].includes(p.phrase)) continue
+    if (
+      p.words < 2 &&
+      ![
+        'barista',
+        'cashier',
+        'paralegal',
+        'bartender',
+        'housekeeper',
+        'janitor',
+        'custodian',
+        'phlebotomist',
+        'caregiver',
+        'receptionist',
+        'bookkeeper',
+        'dishwasher',
+        'electrician',
+        'plumber',
+        'welder',
+        'machinist'
+      ].includes(p.phrase)
+    )
+      continue
     let idx = d.indexOf(` ${p.phrase} `)
     while (idx >= 0) {
       counts.set(p.occ, (counts.get(p.occ) ?? 0) + p.words)
@@ -85,18 +109,60 @@ export function classifyQuery(text: string): string[] {
       }
     }
   }
-  if (/\bdrivers?\b/.test(t) && !out.some((o) => o.includes('driver'))) out.push('delivery_driver', 'truck_driver')
+  if (/\bdrivers?\b/.test(t) && !out.some((o) => o.includes('driver')))
+    out.push('delivery_driver', 'truck_driver')
   return out.slice(0, 4)
 }
 
 export function areRelated(a: string, b: string): boolean {
-  return !!(OCCUPATION_BY_ID.get(a)?.related.includes(b) || OCCUPATION_BY_ID.get(b)?.related.includes(a))
+  return !!(
+    OCCUPATION_BY_ID.get(a)?.related.includes(b) || OCCUPATION_BY_ID.get(b)?.related.includes(a)
+  )
 }
 
 const GENERIC_QUERY_WORDS = new Set([
-  'job', 'jobs', 'work', 'position', 'positions', 'role', 'roles', 'opening', 'openings', 'hiring', 'career', 'careers',
-  'vacancy', 'vacancies', 'associate', 'specialist', 'assistant', 'worker', 'staff', 'team', 'member', 'the', 'and', 'or',
-  'a', 'an', 'of', 'for', 'with', 'in', 'at', 'to', 'senior', 'junior', 'entry', 'level', 'lead', 'i', 'ii', 'iii', 'sr', 'jr'
+  'job',
+  'jobs',
+  'work',
+  'position',
+  'positions',
+  'role',
+  'roles',
+  'opening',
+  'openings',
+  'hiring',
+  'career',
+  'careers',
+  'vacancy',
+  'vacancies',
+  'associate',
+  'specialist',
+  'assistant',
+  'worker',
+  'staff',
+  'team',
+  'member',
+  'the',
+  'and',
+  'or',
+  'a',
+  'an',
+  'of',
+  'for',
+  'with',
+  'in',
+  'at',
+  'to',
+  'senior',
+  'junior',
+  'entry',
+  'level',
+  'lead',
+  'i',
+  'ii',
+  'iii',
+  'sr',
+  'jr'
 ])
 
 export function significantTokens(text: string): string[] {
@@ -135,17 +201,25 @@ export function computeRelevance(
     if (jobOcc && intent.normalizedOccupations.includes(jobOcc)) {
       return job.occupation!.basis === 'title'
         ? { score: 1, basis: `Same occupation (${job.occupation!.label})` }
-        : { score: 0.75, basis: `Same occupation, inferred from description (${job.occupation!.label})` }
+        : {
+            score: 0.75,
+            basis: `Same occupation, inferred from description (${job.occupation!.label})`
+          }
     }
     if (jobOcc && intent.normalizedOccupations.some((o) => areRelated(o, jobOcc))) {
-      return { score: Math.min(0.85, 0.6 + 0.25 * titleFrac), basis: `Related occupation (${job.occupation!.label})` }
+      return {
+        score: Math.min(0.85, 0.6 + 0.25 * titleFrac),
+        basis: `Related occupation (${job.occupation!.label})`
+      }
     }
     if (titleFrac >= 0.5) {
       return { score: 0.5 + 0.2 * titleFrac, basis: 'Search terms appear in the job title' }
     }
     return {
       score: jobOcc ? 0.05 : 0.15 * titleFrac,
-      basis: jobOcc ? `Different occupation (${job.occupation!.label})` : 'Job title does not match the searched occupation'
+      basis: jobOcc
+        ? `Different occupation (${job.occupation!.label})`
+        : 'Job title does not match the searched occupation'
     }
   }
 
@@ -153,7 +227,8 @@ export function computeRelevance(
   if (tokens.length === 0) return { score: 0.5, basis: 'No specific occupation requested' }
   const descNorm = normalizeTitle(job.description.slice(0, 4000))
   const descFrac = tokens.filter((t) => descNorm.includes(` ${t} `)).length / tokens.length
-  if (titleFrac >= 0.5) return { score: 0.6 + 0.4 * titleFrac, basis: 'Search terms appear in the job title' }
+  if (titleFrac >= 0.5)
+    return { score: 0.6 + 0.4 * titleFrac, basis: 'Search terms appear in the job title' }
   if (titleFrac > 0) return { score: 0.5, basis: 'Some search terms appear in the job title' }
   if (descFrac === 1) return { score: 0.4, basis: 'Search terms appear only in the description' }
   return { score: 0.1 * descFrac, basis: 'Search terms not found in the title' }

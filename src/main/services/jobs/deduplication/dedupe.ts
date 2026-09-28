@@ -17,7 +17,8 @@ import { haversineKm } from '../geo/geoService'
  * representative record prefers employer-direct sources.
  */
 
-const COMPANY_SUFFIXES = /\b(inc|incorporated|llc|l\.l\.c|ltd|limited|corp|corporation|co|company|plc|gmbh|ag|sa|s\.a|bv|b\.v|pty|llp|lp|the|group|holdings)\b/g
+const COMPANY_SUFFIXES =
+  /\b(inc|incorporated|llc|l\.l\.c|ltd|limited|corp|corporation|co|company|plc|gmbh|ag|sa|s\.a|bv|b\.v|pty|llp|lp|the|group|holdings)\b/g
 
 export function normalizeCompany(name: string): string {
   return name
@@ -31,7 +32,8 @@ export function normalizeCompany(name: string): string {
     .trim()
 }
 
-const QUALIFIER_RE = /\b(day|days|night|nights|overnight|evening|evenings|weekend|weekends|morning|afternoon|swing|graveyard|1st|2nd|3rd|first|second|third|part time|full time|seasonal|temporary|temp|prn|per diem|remote|hybrid|i{1,3}|iv|[1-5])\b/g
+const QUALIFIER_RE =
+  /\b(day|days|night|nights|overnight|evening|evenings|weekend|weekends|morning|afternoon|swing|graveyard|1st|2nd|3rd|first|second|third|part time|full time|seasonal|temporary|temp|prn|per diem|remote|hybrid|i{1,3}|iv|[1-5])\b/g
 
 export function titleQualifiers(title: string): string {
   const t = normalizeTitle(title)
@@ -63,8 +65,15 @@ function locationsCompatible(a: NormalizedJob, b: NormalizedJob): boolean {
   }
   for (const x of la) {
     for (const y of lb) {
-      if (x.coordinates && y.coordinates && haversineKm(x.coordinates, y.coordinates) <= 15) return true
-      if (x.city && y.city && x.city.toLowerCase() === y.city.toLowerCase() && (!x.country || !y.country || x.country === y.country)) return true
+      if (x.coordinates && y.coordinates && haversineKm(x.coordinates, y.coordinates) <= 15)
+        return true
+      if (
+        x.city &&
+        y.city &&
+        x.city.toLowerCase() === y.city.toLowerCase() &&
+        (!x.country || !y.country || x.country === y.country)
+      )
+        return true
     }
   }
   return false
@@ -86,14 +95,17 @@ function requisitionConflict(a: NormalizedJob, b: NormalizedJob): boolean {
 
 function rank(j: NormalizedJob): number {
   const direct = j.sources.some((s) => s.employerDirect) ? 1000 : 0
-  return direct + Math.min(j.description.length, 5000) / 10 + (j.salary ? 50 : 0) + (j.applyUrl ? 20 : 0)
+  return (
+    direct + Math.min(j.description.length, 5000) / 10 + (j.salary ? 50 : 0) + (j.applyUrl ? 20 : 0)
+  )
 }
 
 function mergeInto(target: NormalizedJob, other: NormalizedJob): NormalizedJob {
   const [primary, secondary] = rank(other) > rank(target) ? [other, target] : [target, other]
   const sources = [...primary.sources]
   for (const s of secondary.sources) {
-    if (!sources.some((x) => x.providerId === s.providerId && x.sourceJobId === s.sourceJobId)) sources.push(s)
+    if (!sources.some((x) => x.providerId === s.providerId && x.sourceJobId === s.sourceJobId))
+      sources.push(s)
   }
   const directApply = sources.find((s) => s.employerDirect && s.applyUrl)?.applyUrl
   const earliestPosted = [primary.postedAt, secondary.postedAt].filter(Boolean).sort()[0]
@@ -103,8 +115,13 @@ function mergeInto(target: NormalizedJob, other: NormalizedJob): NormalizedJob {
     salary: primary.salary ?? secondary.salary,
     postedAt: earliestPosted ?? primary.postedAt,
     locations: primary.locations.length ? primary.locations : secondary.locations,
-    verificationStatus: sources.some((s) => s.employerDirect) && primary.verificationStatus === 'SOURCE_CONFIRMED' ? 'EMPLOYER_CONFIRMED' : primary.verificationStatus,
-    verificationNotes: [...new Set([...primary.verificationNotes, ...secondary.verificationNotes])].slice(0, 8),
+    verificationStatus:
+      sources.some((s) => s.employerDirect) && primary.verificationStatus === 'SOURCE_CONFIRMED'
+        ? 'EMPLOYER_CONFIRMED'
+        : primary.verificationStatus,
+    verificationNotes: [
+      ...new Set([...primary.verificationNotes, ...secondary.verificationNotes])
+    ].slice(0, 8),
     scamSignals: [...new Set([...primary.scamSignals, ...secondary.scamSignals])],
     sources
   }
@@ -131,7 +148,9 @@ export function dedupeJobs(input: NormalizedJob[]): DedupeResult {
   // 2. same canonical URL
   const byUrl = new Map<string, string>()
   for (const [key, j] of [...byKey.entries()]) {
-    const urls = [j.sourceUrl, j.applyUrl, ...j.sources.map((s) => s.applyUrl)].map((u) => canonicalizeUrl(u)).filter(Boolean) as string[]
+    const urls = [j.sourceUrl, j.applyUrl, ...j.sources.map((s) => s.applyUrl)]
+      .map((u) => canonicalizeUrl(u))
+      .filter(Boolean) as string[]
     let target: string | undefined
     for (const u of urls) {
       const k = byUrl.get(u)
@@ -160,7 +179,8 @@ export function dedupeJobs(input: NormalizedJob[]): DedupeResult {
       if (!other) continue
       if (requisitionConflict(other, j) || !locationsCompatible(other, j)) continue
       // Two different postings on the same employer board are separate openings.
-      if (other.ats?.postingId && j.ats?.postingId && other.ats.provider === j.ats.provider) continue
+      if (other.ats?.postingId && j.ats?.postingId && other.ats.provider === j.ats.provider)
+        continue
       byKey.set(otherKey, mergeInto(other, j))
       byKey.delete(key)
       merged++

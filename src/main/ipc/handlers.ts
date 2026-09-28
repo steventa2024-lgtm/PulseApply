@@ -27,26 +27,70 @@ export interface HostBridge {
 
 const id = z.string().min(1).max(200)
 const workMode = z.enum(['onsite', 'hybrid', 'remote'])
-const employmentType = z.enum(['full_time', 'part_time', 'contract', 'temporary', 'internship', 'seasonal', 'per_diem', 'volunteer'])
-const seniority = z.enum(['entry', 'junior', 'mid', 'senior', 'lead', 'manager', 'director', 'executive'])
+const employmentType = z.enum([
+  'full_time',
+  'part_time',
+  'contract',
+  'temporary',
+  'internship',
+  'seasonal',
+  'per_diem',
+  'volunteer'
+])
+const seniority = z.enum([
+  'entry',
+  'junior',
+  'mid',
+  'senior',
+  'lead',
+  'manager',
+  'director',
+  'executive'
+])
 const salaryPeriod = z.enum(['hour', 'day', 'week', 'month', 'year'])
 const appState = z.enum([
-  'DISCOVERED', 'SAVED', 'QUEUED', 'OPENING', 'AUTOFILLING', 'NEEDS_USER_INPUT', 'READY_FOR_REVIEW', 'APPROVED', 'SUBMITTING',
-  'SUBMITTED', 'SUBMISSION_UNVERIFIED', 'FAILED', 'CANCELLED', 'MANUAL_COMPLETION_REQUIRED'
+  'DISCOVERED',
+  'SAVED',
+  'QUEUED',
+  'OPENING',
+  'AUTOFILLING',
+  'NEEDS_USER_INPUT',
+  'READY_FOR_REVIEW',
+  'APPROVED',
+  'SUBMITTING',
+  'SUBMITTED',
+  'SUBMISSION_UNVERIFIED',
+  'FAILED',
+  'CANCELLED',
+  'MANUAL_COMPLETION_REQUIRED'
 ])
-const verification = z.enum(['SOURCE_CONFIRMED', 'EMPLOYER_CONFIRMED', 'UNVERIFIED', 'STALE', 'EXPIRED', 'REMOVED', 'VERIFICATION_FAILED'])
+const verification = z.enum([
+  'SOURCE_CONFIRMED',
+  'EMPLOYER_CONFIRMED',
+  'UNVERIFIED',
+  'STALE',
+  'EXPIRED',
+  'REMOVED',
+  'VERIFICATION_FAILED'
+])
 
 export const SearchCriteriaSchema = z.object({
   query: z.string().max(300),
   location: z.string().max(200).optional(),
   radius: z.number().positive().max(500).optional(),
   radiusUnit: z.enum(['mi', 'km']).optional(),
-  country: z.string().regex(/^[A-Z]{2}$/).optional(),
+  country: z
+    .string()
+    .regex(/^[A-Z]{2}$/)
+    .optional(),
   workModes: z.array(workMode).max(3).optional(),
   employmentTypes: z.array(employmentType).max(8).optional(),
   seniority: z.array(seniority).max(8).optional(),
   minSalary: z.number().positive().max(10_000_000).optional(),
-  salaryCurrency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  salaryCurrency: z
+    .string()
+    .regex(/^[A-Z]{3}$/)
+    .optional(),
   salaryPeriod: salaryPeriod.optional(),
   postedWithinDays: z.number().int().positive().max(365).optional(),
   providerIds: z.array(z.string().max(50)).max(50).optional(),
@@ -55,9 +99,17 @@ export const SearchCriteriaSchema = z.object({
   excludedCompanies: z.array(z.string().max(120)).max(50).optional()
 })
 
-const field = z.object({ value: z.string().max(300), confidence: z.number().min(0).max(1), source: z.enum(['resume', 'user']), confirmed: z.boolean() })
+const field = z.object({
+  value: z.string().max(300),
+  confidence: z.number().min(0).max(1),
+  source: z.enum(['resume', 'user']),
+  confirmed: z.boolean()
+})
 const yesNo = z.enum(['yes', 'no', 'unset'])
-const httpOrEmpty = z.string().max(500).refine((u) => u === '' || isPublicHttpUrl(u), 'Must be an http(s) URL')
+const httpOrEmpty = z
+  .string()
+  .max(500)
+  .refine((u) => u === '' || isPublicHttpUrl(u), 'Must be an http(s) URL')
 
 export const ProfileSchema = z.object({
   fullName: field,
@@ -71,8 +123,25 @@ export const ProfileSchema = z.object({
   portfolioUrl: httpOrEmpty,
   headline: z.string().max(200).optional(),
   summary: z.string().max(3000).optional(),
-  skills: z.array(z.object({ name: z.string().min(1).max(80), canonicalId: z.string().max(60).optional(), source: z.enum(['resume', 'user']), confirmed: z.boolean() })).max(300),
-  certifications: z.array(z.object({ name: z.string().min(1).max(150), source: z.enum(['resume', 'user']), confirmed: z.boolean() })).max(100),
+  skills: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(80),
+        canonicalId: z.string().max(60).optional(),
+        source: z.enum(['resume', 'user']),
+        confirmed: z.boolean()
+      })
+    )
+    .max(300),
+  certifications: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(150),
+        source: z.enum(['resume', 'user']),
+        confirmed: z.boolean()
+      })
+    )
+    .max(100),
   workHistory: z
     .array(
       z.object({
@@ -80,8 +149,14 @@ export const ProfileSchema = z.object({
         title: z.string().max(150),
         company: z.string().max(150),
         location: z.string().max(150).optional(),
-        startDate: z.string().regex(/^\d{4}-\d{2}$/).optional(),
-        endDate: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+        startDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}$/)
+          .optional(),
+        endDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}$/)
+          .optional(),
         current: z.boolean(),
         months: z.number().int().min(0).max(1000).optional(),
         summary: z.string().max(3000).optional(),
@@ -113,11 +188,23 @@ export const ProfileSchema = z.object({
     workModes: z.array(workMode).max(3),
     employmentTypes: z.array(employmentType).max(8),
     minSalary: z.number().positive().max(10_000_000).optional(),
-    salaryCurrency: z.string().regex(/^[A-Z]{3}$/).optional(),
+    salaryCurrency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .optional(),
     salaryPeriod: salaryPeriod.optional(),
     excludedOccupations: z.array(z.string().max(60)).max(30)
   }),
-  customAnswers: z.array(z.object({ id, question: z.string().max(200), answer: z.string().max(2000), approved: z.boolean() })).max(100),
+  customAnswers: z
+    .array(
+      z.object({
+        id,
+        question: z.string().max(200),
+        answer: z.string().max(2000),
+        approved: z.boolean()
+      })
+    )
+    .max(100),
   sensitive: z.object({
     authorizedToWork: z.record(z.string().regex(/^[A-Z]{2}$/), yesNo),
     requiresSponsorship: yesNo,
@@ -130,9 +217,30 @@ const SettingsPatch = z
   .object({
     demoMode: z.boolean(),
     onlineGeocoding: z.boolean(),
-    ollama: z.object({ enabled: z.boolean(), baseUrl: z.string().url().max(200).refine((u) => /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\/?$/.test(u), 'Ollama must run on this computer (localhost)'), model: z.string().min(1).max(100) }).partial(),
-    browser: z.object({ executablePath: z.string().max(500).optional(), channel: z.enum(['chromium', 'chrome', 'msedge']).optional() }),
-    matching: z.object({ weights: z.record(z.string(), z.number().min(0).max(100)), strongThreshold: z.number().min(40).max(100) }).partial(),
+    ollama: z
+      .object({
+        enabled: z.boolean(),
+        baseUrl: z
+          .string()
+          .url()
+          .max(200)
+          .refine(
+            (u) => /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\/?$/.test(u),
+            'Ollama must run on this computer (localhost)'
+          ),
+        model: z.string().min(1).max(100)
+      })
+      .partial(),
+    browser: z.object({
+      executablePath: z.string().max(500).optional(),
+      channel: z.enum(['chromium', 'chrome', 'msedge']).optional()
+    }),
+    matching: z
+      .object({
+        weights: z.record(z.string(), z.number().min(0).max(100)),
+        strongThreshold: z.number().min(40).max(100)
+      })
+      .partial(),
     staleAfterDays: z.number().int().min(1).max(365),
     contactEmailForApis: z.string().email().max(200).optional()
   })
@@ -147,7 +255,10 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
   'profile:save': ProfileSchema as never,
   'profile:pick-resume': z.undefined(),
   'profile:import-resume': z.object({ path: z.string().min(1).max(1000) }),
-  'profile:import-resume-data': z.object({ fileName: z.string().min(1).max(200), base64: z.string().min(1).max(22_000_000) }),
+  'profile:import-resume-data': z.object({
+    fileName: z.string().min(1).max(200),
+    base64: z.string().min(1).max(22_000_000)
+  }),
   'profile:set-default-resume': z.object({ id }),
   'profile:rename-resume': z.object({ id, label: z.string().min(1).max(80) }),
   'profile:delete-resume': z.object({ id }),
@@ -199,15 +310,28 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
   'searches:runs': z.undefined(),
   'sources:list': z.undefined(),
   'sources:set-enabled': z.object({ id: z.string().max(50), enabled: z.boolean() }),
-  'sources:set-credentials': z.object({ providerId: z.string().max(50), values: z.record(z.string().max(80), z.string().max(2000)) }),
+  'sources:set-credentials': z.object({
+    providerId: z.string().max(50),
+    values: z.record(z.string().max(80), z.string().max(2000))
+  }),
   'sources:clear-credentials': z.object({ providerId: z.string().max(50) }),
   'employers:list': z.undefined(),
-  'employers:add-url': z.object({ url: z.string().min(4).max(2048), name: z.string().max(120).optional(), country: z.string().regex(/^[A-Z]{2}$/).optional() }),
+  'employers:add-url': z.object({
+    url: z.string().min(4).max(2048),
+    name: z.string().max(120).optional(),
+    country: z
+      .string()
+      .regex(/^[A-Z]{2}$/)
+      .optional()
+  }),
   'employers:add-board': z.object({
     provider: z.enum(['greenhouse', 'lever', 'ashby', 'smartrecruiters']),
     boardId: z.string().min(1).max(100),
     name: z.string().max(120).optional(),
-    country: z.string().regex(/^[A-Z]{2}$/).optional()
+    country: z
+      .string()
+      .regex(/^[A-Z]{2}$/)
+      .optional()
   }),
   'employers:remove': z.object({ id }),
   'employers:discover': SearchCriteriaSchema as never,
@@ -239,9 +363,13 @@ function stripScore(job: ScoredJob): NormalizedJob {
   return base
 }
 
-export function createHandlers(svc: Services, host: HostBridge, emit: (channel: string, payload: unknown) => void): Handlers {
+export function createHandlers(
+  svc: Services,
+  host: HostBridge,
+  emit: (channel: string, payload: unknown) => void
+): Handlers {
   const { store } = svc
-  const jobsChanged = () => emit('jobs:changed', null)
+  const jobsChanged = (): void => emit('jobs:changed', null)
 
   return {
     'app:info': async () => ({
@@ -262,7 +390,11 @@ export function createHandlers(svc: Services, host: HostBridge, emit: (channel: 
 
     'profile:get': async () => {
       const profile = store.candidate.get()
-      return { profile, resumes: store.candidate.resumes(), needsConfirmation: ResumeService.needsConfirmation(profile) }
+      return {
+        profile,
+        resumes: store.candidate.resumes(),
+        needsConfirmation: ResumeService.needsConfirmation(profile)
+      }
     },
     'profile:save': async (p) => store.candidate.save(p as CandidateProfile),
     'profile:pick-resume': async () => {
@@ -270,7 +402,8 @@ export function createHandlers(svc: Services, host: HostBridge, emit: (channel: 
       return file ? svc.resumes.importFile(file) : null
     },
     'profile:import-resume': ({ path }) => svc.resumes.importFile(path),
-    'profile:import-resume-data': ({ fileName, base64 }) => svc.resumes.importBuffer(fileName, Buffer.from(base64, 'base64')),
+    'profile:import-resume-data': ({ fileName, base64 }) =>
+      svc.resumes.importBuffer(fileName, Buffer.from(base64, 'base64')),
     'profile:set-default-resume': async ({ id }) => {
       store.candidate.setDefaultResume(id)
       return store.candidate.resumes()
@@ -283,18 +416,33 @@ export function createHandlers(svc: Services, host: HostBridge, emit: (channel: 
       svc.resumes.deleteResume(id)
       return store.candidate.resumes()
     },
-    'profile:export': async () => host.saveJsonFile('pulseapply-profile.json', JSON.stringify(svc.resumes.exportProfile(), null, 2)),
+    'profile:export': async () =>
+      host.saveJsonFile(
+        'pulseapply-profile.json',
+        JSON.stringify(svc.resumes.exportProfile(), null, 2)
+      ),
     'profile:delete-all': async () => {
-      const ok = await host.confirm('Delete your profile and all stored resumes?', 'Application history, saved searches and jobs are kept. This cannot be undone.')
+      const ok = await host.confirm(
+        'Delete your profile and all stored resumes?',
+        'Application history, saved searches and jobs are kept. This cannot be undone.'
+      )
       if (ok) svc.resumes.deleteAll()
       return ok
     },
 
-    'search:run': (criteria) => svc.search.run(criteria, { trigger: 'manual', onProgress: (p) => emit('search:progress', p) }),
+    'search:run': (criteria) =>
+      svc.search.run(criteria, {
+        trigger: 'manual',
+        onProgress: (p) => emit('search:progress', p)
+      }),
     'search:cancel': async ({ runId }) => svc.search.cancel(runId),
     'search:parse': async (criteria) => {
       const p = store.candidate.get()
-      return buildIntent(criteria, { location: p.preferences.location || p.location.value || undefined, radius: p.preferences.radius, radiusUnit: p.preferences.radiusUnit })
+      return buildIntent(criteria, {
+        location: p.preferences.location || p.location.value || undefined,
+        radius: p.preferences.radius,
+        radiusUnit: p.preferences.radiusUnit
+      })
     },
     'search:last': async () => {
       const last = svc.search.lastSearch()
@@ -302,13 +450,20 @@ export function createHandlers(svc: Services, host: HostBridge, emit: (channel: 
       const jobs = store.jobs.list({ ids: last.jobIds, view: 'all', limit: 2000 })
       const order = new Map(last.jobIds.map((jid, i) => [jid, i]))
       jobs.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-      return { criteria: last.criteria, intent: last.intent, stats: last.stats, jobs, finishedAt: last.finishedAt }
+      return {
+        criteria: last.criteria,
+        intent: last.intent,
+        stats: last.stats,
+        jobs,
+        finishedAt: last.finishedAt
+      }
     },
     'search:manual-links': async (criteria) => svc.search.manualLinks(criteria),
     'geo:suggest': async ({ text }) => svc.geo.suggest(text),
     'geo:countries': async () => allCountries(),
 
-    'jobs:list': async (f) => store.jobs.list({ ...f, limit: f.limit ?? 500, includeDemo: store.settings.get().demoMode }),
+    'jobs:list': async (f) =>
+      store.jobs.list({ ...f, limit: f.limit ?? 500, includeDemo: store.settings.get().demoMode }),
     'jobs:get': async ({ id }) => store.jobs.get(id) ?? null,
     'jobs:save': async ({ id, saved }) => {
       store.jobs.setSaved(id, saved)
@@ -324,7 +479,11 @@ export function createHandlers(svc: Services, host: HostBridge, emit: (channel: 
       const job = store.jobs.get(id)
       if (!job) return null
       const res = await checkAvailability(svc.http, stripScore(job))
-      store.jobs.setVerification(id, res.status, res.redirectWarning ? `${res.note} ${res.redirectWarning}` : res.note)
+      store.jobs.setVerification(
+        id,
+        res.status,
+        res.redirectWarning ? `${res.note} ${res.redirectWarning}` : res.note
+      )
       jobsChanged()
       return store.jobs.get(id) ?? null
     },
@@ -336,16 +495,21 @@ export function createHandlers(svc: Services, host: HostBridge, emit: (channel: 
 
     'applications:list': async ({ states }) => store.applications.list(states),
     'applications:events': async ({ id }) => store.applications.events(id),
-    'applications:start': ({ jobId, resumeId }) => svc.applications.start(jobId, { resumeId, origin: 'desktop' }),
+    'applications:start': ({ jobId, resumeId }) =>
+      svc.applications.start(jobId, { resumeId, origin: 'desktop' }),
     'applications:rescan': ({ id }) => svc.applications.rescan(id),
     'applications:advance': ({ id }) => svc.applications.advance(id),
     'applications:approve': ({ id }) => svc.applications.approveAndSubmit(id),
     'applications:check': ({ id }) => svc.applications.checkConfirmation(id),
-    'applications:report-manual': ({ id, note }) => svc.applications.reportManualSubmission(id, note),
+    'applications:report-manual': ({ id, note }) =>
+      svc.applications.reportManualSubmission(id, note),
     'applications:reopen': ({ id }) => svc.applications.reopen(id),
     'applications:cancel': ({ id }) => svc.applications.cancel(id),
 
-    'searches:list': async () => store.searches.list().map((s) => ({ ...s, running: s.running || svc.scheduler.isRunning(s.id) })),
+    'searches:list': async () =>
+      store.searches
+        .list()
+        .map((s) => ({ ...s, running: s.running || svc.scheduler.isRunning(s.id) })),
     'searches:save': async (input) => store.searches.save(input),
     'searches:delete': async ({ id }) => {
       svc.scheduler.cancel(id)
@@ -394,8 +558,11 @@ export function createHandlers(svc: Services, host: HostBridge, emit: (channel: 
     },
     'employers:discover': async (criteria) => {
       const p = store.candidate.get()
-      const intent = buildIntent(criteria, { location: p.preferences.location || p.location.value || undefined })
-      if (intent.locationText) intent.location = await svc.geo.resolveSearchLocation(intent.locationText)
+      const intent = buildIntent(criteria, {
+        location: p.preferences.location || p.location.value || undefined
+      })
+      if (intent.locationText)
+        intent.location = await svc.geo.resolveSearchLocation(intent.locationText)
       return svc.employers.discover(intent)
     },
 
@@ -426,11 +593,17 @@ export function createHandlers(svc: Services, host: HostBridge, emit: (channel: 
         sourceUrl: 'https://example.com/pulseapply-demo-job',
         title: 'Warehouse Associate (DEMO)',
         company: 'Demo Employer — not real',
-        descriptionText: 'DEMO LISTING for practising the application workflow. This job does not exist.\nRequirements:\n• Order picking and packing\n• RF scanner experience',
+        descriptionText:
+          'DEMO LISTING for practising the application workflow. This job does not exist.\nRequirements:\n• Order picking and packing\n• RF scanner experience',
         locationText: 'Los Angeles, CA',
         employerDirect: false
       }
-      const res = normalizeDraft(draft, { providerId: 'demo', providerName: 'Demo mode', geo: svc.geo, now })
+      const res = normalizeDraft(draft, {
+        providerId: 'demo',
+        providerName: 'Demo mode',
+        geo: svc.geo,
+        now
+      })
       if (!res.job) throw new Error(res.error)
       const job: ScoredJob = {
         ...res.job,
@@ -453,6 +626,9 @@ export function validatePayload<C extends IpcChannel>(channel: C, payload: unkno
   const schema = schemas[channel]
   if (!schema) throw new Error(`Unknown channel ${channel}`)
   const res = schema.safeParse(payload)
-  if (!res.success) throw new Error(`Invalid request: ${res.error.issues.map((i) => `${i.path.join('.') || 'payload'} ${i.message}`).join('; ')}`)
+  if (!res.success)
+    throw new Error(
+      `Invalid request: ${res.error.issues.map((i) => `${i.path.join('.') || 'payload'} ${i.message}`).join('; ')}`
+    )
   return res.data
 }

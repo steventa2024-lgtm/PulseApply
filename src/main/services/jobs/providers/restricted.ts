@@ -5,7 +5,23 @@ import type { JobProvider } from './types'
  * automates their logged-in pages. They are listed so the user can see their
  * status and open a pre-filled search to browse manually ("user-assisted").
  */
-function manualProvider(p: Omit<JobProvider, 'supports' | 'isConfigured' | 'fetch' | 'normalize' | 'credentials' | 'defaultEnabled' | 'rateLimit' | 'cacheTtlMs' | 'timeoutMs' | 'hosts' | 'kind' | 'manualOnly'>): JobProvider {
+function manualProvider(
+  p: Omit<
+    JobProvider,
+    | 'supports'
+    | 'isConfigured'
+    | 'fetch'
+    | 'normalize'
+    | 'credentials'
+    | 'defaultEnabled'
+    | 'rateLimit'
+    | 'cacheTtlMs'
+    | 'timeoutMs'
+    | 'hosts'
+    | 'kind'
+    | 'manualOnly'
+  >
+): JobProvider {
   return {
     ...p,
     kind: 'restricted',
@@ -16,7 +32,10 @@ function manualProvider(p: Omit<JobProvider, 'supports' | 'isConfigured' | 'fetc
     timeoutMs: 0,
     hosts: [],
     manualOnly: true,
-    supports: () => ({ ok: false, reason: 'No authorized API access; open the search in your browser instead' }),
+    supports: () => ({
+      ok: false,
+      reason: 'No authorized API access; open the search in your browser instead'
+    }),
     isConfigured: () => false,
     fetch: async () => [],
     normalize: () => null
@@ -26,17 +45,20 @@ function manualProvider(p: Omit<JobProvider, 'supports' | 'isConfigured' | 'fetc
 export const linkedinProvider = manualProvider({
   id: 'linkedin',
   name: 'LinkedIn Jobs',
-  description: 'LinkedIn’s job APIs are limited to approved partners; automated scraping violates its terms.',
+  description:
+    'LinkedIn’s job APIs are limited to approved partners; automated scraping violates its terms.',
   markets: 'Worldwide (manual browsing)',
   docsUrl: 'https://learn.microsoft.com/en-us/linkedin/talent/job-postings',
-  termsNote: 'Requires a LinkedIn partner agreement for API access. PulseApply opens a pre-filled search for you to browse.',
+  termsNote:
+    'Requires a LinkedIn partner agreement for API access. PulseApply opens a pre-filled search for you to browse.',
   manualSearchUrlTemplate: 'https://www.linkedin.com/jobs/search/?keywords={q}&location={l}'
 })
 
 export const indeedProvider = manualProvider({
   id: 'indeed',
   name: 'Indeed',
-  description: 'Indeed’s public job-search (Publisher) API is closed to new integrations; scraping is prohibited.',
+  description:
+    'Indeed’s public job-search (Publisher) API is closed to new integrations; scraping is prohibited.',
   markets: 'Worldwide (manual browsing)',
   docsUrl: 'https://docs.indeed.com/',
   termsNote: 'Licensed access only. PulseApply opens a pre-filled Indeed search for you to browse.',
@@ -64,17 +86,42 @@ export const glassdoorProvider = manualProvider({
 /** Indeed uses country-specific domains. */
 export function indeedDomain(country: string | undefined): string {
   const map: Record<string, string> = {
-    US: 'www.indeed.com', GB: 'uk.indeed.com', CA: 'ca.indeed.com', AU: 'au.indeed.com', DE: 'de.indeed.com', FR: 'fr.indeed.com',
-    IN: 'in.indeed.com', IE: 'ie.indeed.com', NL: 'nl.indeed.com', ES: 'es.indeed.com', IT: 'it.indeed.com', MX: 'mx.indeed.com',
-    BR: 'br.indeed.com', NZ: 'nz.indeed.com', SG: 'sg.indeed.com', ZA: 'za.indeed.com', JP: 'jp.indeed.com', CH: 'ch.indeed.com',
-    AT: 'at.indeed.com', BE: 'be.indeed.com', PL: 'pl.indeed.com', SE: 'se.indeed.com'
+    US: 'www.indeed.com',
+    GB: 'uk.indeed.com',
+    CA: 'ca.indeed.com',
+    AU: 'au.indeed.com',
+    DE: 'de.indeed.com',
+    FR: 'fr.indeed.com',
+    IN: 'in.indeed.com',
+    IE: 'ie.indeed.com',
+    NL: 'nl.indeed.com',
+    ES: 'es.indeed.com',
+    IT: 'it.indeed.com',
+    MX: 'mx.indeed.com',
+    BR: 'br.indeed.com',
+    NZ: 'nz.indeed.com',
+    SG: 'sg.indeed.com',
+    ZA: 'za.indeed.com',
+    JP: 'jp.indeed.com',
+    CH: 'ch.indeed.com',
+    AT: 'at.indeed.com',
+    BE: 'be.indeed.com',
+    PL: 'pl.indeed.com',
+    SE: 'se.indeed.com'
   }
   return map[country ?? 'US'] ?? 'www.indeed.com'
 }
 
-export function manualSearchUrl(provider: JobProvider, query: string, location: string, country?: string): string | undefined {
+export function manualSearchUrl(
+  provider: JobProvider,
+  query: string,
+  location: string,
+  country?: string
+): string | undefined {
   if (!provider.manualSearchUrlTemplate) return undefined
-  let url = provider.manualSearchUrlTemplate.replace('{q}', encodeURIComponent(query)).replace('{l}', encodeURIComponent(location))
+  let url = provider.manualSearchUrlTemplate
+    .replace('{q}', encodeURIComponent(query))
+    .replace('{l}', encodeURIComponent(location))
   if (provider.id === 'indeed') url = url.replace('www.indeed.com', indeedDomain(country))
   return url
 }

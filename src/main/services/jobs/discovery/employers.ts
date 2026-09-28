@@ -39,9 +39,23 @@ export class EmployerService {
     this.store.employers.delete(id)
   }
 
-  async addBoard(input: { provider: Exclude<AtsProvider, 'jsonld'>; boardId: string; name?: string; country?: string; careersUrl?: string; addedBy?: 'user' | 'discovery' }, signal?: AbortSignal): Promise<EmployerRecord> {
+  async addBoard(
+    input: {
+      provider: Exclude<AtsProvider, 'jsonld'>
+      boardId: string
+      name?: string
+      country?: string
+      careersUrl?: string
+      addedBy?: 'user' | 'discovery'
+    },
+    signal?: AbortSignal
+  ): Promise<EmployerRecord> {
     const boardId = input.boardId.trim()
-    if (!/^[A-Za-z0-9][A-Za-z0-9 ._%-]{0,99}$/.test(boardId) || (input.provider !== 'ashby' && boardId.includes(' '))) throw new EmployerError('That board identifier is not valid')
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9 ._%-]{0,99}$/.test(boardId) ||
+      (input.provider !== 'ashby' && boardId.includes(' '))
+    )
+      throw new EmployerError('That board identifier is not valid')
     const v = await validateBoard(this.http, input.provider, boardId, signal)
     if (!v.ok) throw new EmployerError(v.error ?? 'Could not validate that job board')
     return this.store.employers.upsert({
@@ -62,26 +76,61 @@ export class EmployerService {
    * Adds an employer from any careers URL: a direct ATS link, a career page
    * that embeds/links an ATS board, or a page publishing JobPosting data.
    */
-  async addFromUrl(rawUrl: string, opts: { name?: string; country?: string } = {}, signal?: AbortSignal): Promise<EmployerRecord[]> {
+  async addFromUrl(
+    rawUrl: string,
+    opts: { name?: string; country?: string } = {},
+    signal?: AbortSignal
+  ): Promise<EmployerRecord[]> {
     const url = canonicalizeUrl(rawUrl.trim())
     if (!url) throw new EmployerError('Enter a valid http(s) URL')
     const direct = detectAtsFromUrl(url)
-    if (direct) return [await this.addBoard({ provider: direct.provider, boardId: direct.board, name: opts.name, country: opts.country, careersUrl: url }, signal)]
+    if (direct)
+      return [
+        await this.addBoard(
+          {
+            provider: direct.provider,
+            boardId: direct.board,
+            name: opts.name,
+            country: opts.country,
+            careersUrl: url
+          },
+          signal
+        )
+      ]
 
     const u = await assertPublicUrl(url).catch((e: Error) => {
       throw new EmployerError(e.message)
     })
     const rules = await robotsFor(this.http, u.origin, signal)
     if (!isAllowed(rules, u.pathname + u.search)) {
-      throw new EmployerError('This site’s robots.txt does not allow automated access to that page. Open it manually instead.')
+      throw new EmployerError(
+        'This site’s robots.txt does not allow automated access to that page. Open it manually instead.'
+      )
     }
-    const res = await this.http.request({ url: u.toString(), signal, timeoutMs: 15_000, retries: 1, maxBytes: 3 * 1024 * 1024 })
+    const res = await this.http.request({
+      url: u.toString(),
+      signal,
+      timeoutMs: 15_000,
+      retries: 1,
+      maxBytes: 3 * 1024 * 1024
+    })
     const refs = detectAtsInHtml(res.text)
     const added: EmployerRecord[] = []
     const errors: string[] = []
     for (const ref of refs.slice(0, 3)) {
       try {
-        added.push(await this.addBoard({ provider: ref.provider, boardId: ref.board, name: opts.name, country: opts.country, careersUrl: url }, signal))
+        added.push(
+          await this.addBoard(
+            {
+              provider: ref.provider,
+              boardId: ref.board,
+              name: opts.name,
+              country: opts.country,
+              careersUrl: url
+            },
+            signal
+          )
+        )
       } catch (err) {
         errors.push(`${ref.provider}/${ref.board}: ${(err as Error).message}`)
       }
@@ -89,12 +138,21 @@ export class EmployerService {
     if (added.length) return added
 
     const postings = extractJsonLd(res.text)
-    const crawl = postings.length ? { drafts: postings, pagesFetched: 1 } : await crawlCareerPage(this.http, u.toString(), opts.name ?? u.hostname, signal ?? new AbortController().signal, 5)
+    const crawl = postings.length
+      ? { drafts: postings, pagesFetched: 1 }
+      : await crawlCareerPage(
+          this.http,
+          u.toString(),
+          opts.name ?? u.hostname,
+          signal ?? new AbortController().signal,
+          5
+        )
     const found = 'drafts' in crawl ? crawl.drafts.length : 0
     if (found > 0) {
       const name =
         opts.name ??
-        ((postings[0]?.hiringOrganization as Record<string, unknown> | undefined)?.name as string | undefined) ??
+        ((postings[0]?.hiringOrganization as Record<string, unknown> | undefined)?.name as
+          string | undefined) ??
         u.hostname.replace(/^www\./, '')
       return [
         this.store.employers.upsert({
@@ -126,12 +184,23 @@ export class EmployerService {
    */
   async discover(intent: SearchIntent, signal?: AbortSignal): Promise<EmployerCandidate[]> {
     const key = this.store.secrets.get('brave.apiKey')
-    if (!key) throw new EmployerError('Add a Brave Search API key on the Sources page to enable employer discovery.')
-    const occ = intent.normalizedOccupations[0] ? OCCUPATION_BY_ID.get(intent.normalizedOccupations[0])?.label : undefined
+    if (!key)
+      throw new EmployerError(
+        'Add a Brave Search API key on the Sources page to enable employer discovery.'
+      )
+    const occ = intent.normalizedOccupations[0]
+      ? OCCUPATION_BY_ID.get(intent.normalizedOccupations[0])?.label
+      : undefined
     const what = occ ?? intent.keywords[0] ?? ''
     const where = intent.location?.city ?? intent.location?.region ?? intent.locationText ?? ''
     if (!what) throw new EmployerError('Enter an occupation or keywords first.')
-    const sites = ['boards.greenhouse.io', 'job-boards.greenhouse.io', 'jobs.lever.co', 'jobs.ashbyhq.com', 'jobs.smartrecruiters.com']
+    const sites = [
+      'boards.greenhouse.io',
+      'job-boards.greenhouse.io',
+      'jobs.lever.co',
+      'jobs.ashbyhq.com',
+      'jobs.smartrecruiters.com'
+    ]
     const refs = new Map<string, AtsRef & { url: string }>()
     for (const site of sites) {
       if (signal?.aborted) break

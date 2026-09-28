@@ -62,22 +62,35 @@ function toRegex(rule: string): RegExp {
 export function isAllowed(rules: RobotsRules, pathAndQuery: string): boolean {
   let best: { len: number; allow: boolean } | null = null
   for (const r of rules.allow) {
-    if (toRegex(r).test(pathAndQuery) && (!best || r.length >= best.len)) best = { len: r.length, allow: true }
+    if (toRegex(r).test(pathAndQuery) && (!best || r.length >= best.len))
+      best = { len: r.length, allow: true }
   }
   for (const r of rules.disallow) {
-    if (toRegex(r).test(pathAndQuery) && (!best || r.length > best.len)) best = { len: r.length, allow: false }
+    if (toRegex(r).test(pathAndQuery) && (!best || r.length > best.len))
+      best = { len: r.length, allow: false }
   }
   return best ? best.allow : true
 }
 
 const cache = new Map<string, { rules: RobotsRules; at: number }>()
 
-export async function robotsFor(http: HttpClient, origin: string, signal?: AbortSignal): Promise<RobotsRules> {
+export async function robotsFor(
+  http: HttpClient,
+  origin: string,
+  signal?: AbortSignal
+): Promise<RobotsRules> {
   const hit = cache.get(origin)
   if (hit && Date.now() - hit.at < 6 * 3600_000) return hit.rules
   let rules: RobotsRules = { allow: [], disallow: [], sitemaps: [] }
   try {
-    const res = await http.request({ url: `${origin}/robots.txt`, signal, timeoutMs: 10_000, retries: 1, acceptStatuses: [401, 403, 404, 410], maxBytes: 512 * 1024 })
+    const res = await http.request({
+      url: `${origin}/robots.txt`,
+      signal,
+      timeoutMs: 10_000,
+      retries: 1,
+      acceptStatuses: [401, 403, 404, 410],
+      maxBytes: 512 * 1024
+    })
     if (res.status === 401 || res.status === 403) {
       rules = { allow: [], disallow: ['/'], sitemaps: [] }
     } else if (res.status === 200) {

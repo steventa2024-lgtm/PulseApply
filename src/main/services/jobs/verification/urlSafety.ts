@@ -41,7 +41,13 @@ function isPrivateIPv4(ip: string): boolean {
 function isPrivateIPv6(ip: string): boolean {
   const lower = ip.toLowerCase()
   if (lower === '::' || lower === '::1') return true
-  if (lower.startsWith('fe80') || lower.startsWith('fc') || lower.startsWith('fd') || lower.startsWith('ff')) return true
+  if (
+    lower.startsWith('fe80') ||
+    lower.startsWith('fc') ||
+    lower.startsWith('fd') ||
+    lower.startsWith('ff')
+  )
+    return true
   const mapped = /::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(lower)
   if (mapped) return isPrivateIPv4(mapped[1])
   return false
@@ -54,10 +60,14 @@ export function isPrivateAddress(ip: string): boolean {
   return true
 }
 
-const LOCAL_HOSTNAMES = /^(localhost|localhost\.localdomain|.*\.local|.*\.internal|.*\.lan|.*\.home|.*\.corp)$/i
+const LOCAL_HOSTNAMES =
+  /^(localhost|localhost\.localdomain|.*\.local|.*\.internal|.*\.lan|.*\.home|.*\.corp)$/i
 
 /** Synchronous check suitable for URLs from job providers and the renderer. */
-export function isPublicHttpUrl(value: string | undefined | null, opts: { requireHttps?: boolean } = {}): boolean {
+export function isPublicHttpUrl(
+  value: string | undefined | null,
+  opts: { requireHttps?: boolean } = {}
+): boolean {
   const url = parseHttpUrl(value)
   if (!url) return false
   if (opts.requireHttps && url.protocol !== 'https:') return false
@@ -79,7 +89,8 @@ export async function assertPublicUrl(value: string): Promise<URL> {
   if (!net.isIP(host)) {
     const addrs = await dns.lookup(host, { all: true }).catch(() => [])
     if (addrs.length === 0) throw new Error(`Could not resolve ${host}`)
-    if (addrs.some((a) => isPrivateAddress(a.address))) throw new Error('URL resolves to a private network address')
+    if (addrs.some((a) => isPrivateAddress(a.address)))
+      throw new Error('URL resolves to a private network address')
   }
   return url
 }
@@ -88,11 +99,17 @@ export async function assertPublicUrl(value: string): Promise<URL> {
 export function baseDomain(value: string | undefined): string | undefined {
   const url = parseHttpUrl(value)
   if (!url) return undefined
-  const parts = url.hostname.toLowerCase().replace(/^www\./, '').split('.')
+  const parts = url.hostname
+    .toLowerCase()
+    .replace(/^www\./, '')
+    .split('.')
   if (parts.length <= 2) return parts.join('.')
   const sld = parts[parts.length - 2]
   // co.uk, com.au, co.jp, ...
-  if (sld.length <= 3 && ['co', 'com', 'org', 'net', 'gov', 'ac', 'edu', 'ne', 'or'].includes(sld)) {
+  if (
+    sld.length <= 3 &&
+    ['co', 'com', 'org', 'net', 'gov', 'ac', 'edu', 'ne', 'or'].includes(sld)
+  ) {
     return parts.slice(-3).join('.')
   }
   return parts.slice(-2).join('.')
@@ -104,7 +121,11 @@ export function canonicalizeUrl(value: string | undefined): string | undefined {
   if (!url) return undefined
   url.hash = ''
   for (const key of [...url.searchParams.keys()]) {
-    if (/^(utm_|ref$|refs?rc$|source$|src$|gh_src$|lever-source|lever-origin|trk|trackingid|fbclid|gclid|mc_)/i.test(key)) {
+    if (
+      /^(utm_|ref$|refs?rc$|source$|src$|gh_src$|lever-source|lever-origin|trk|trackingid|fbclid|gclid|mc_)/i.test(
+        key
+      )
+    ) {
       url.searchParams.delete(key)
     }
   }

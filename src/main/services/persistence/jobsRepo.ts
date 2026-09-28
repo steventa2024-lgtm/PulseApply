@@ -161,7 +161,15 @@ export class JobsRepo {
              VALUES (?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(provider_id, source_job_id) DO UPDATE SET job_id = excluded.job_id,
                source_url = excluded.source_url, apply_url = excluded.apply_url, fetched_at = excluded.fetched_at`,
-            [s.providerId, s.sourceJobId, job.id, s.sourceUrl, s.applyUrl ?? null, s.employerDirect ? 1 : 0, s.fetchedAt]
+            [
+              s.providerId,
+              s.sourceJobId,
+              job.id,
+              s.sourceUrl,
+              s.applyUrl ?? null,
+              s.employerDirect ? 1 : 0,
+              s.fetchedAt
+            ]
           )
         }
       }
@@ -230,13 +238,15 @@ export class JobsRepo {
 
   setSaved(id: string, saved: boolean): void {
     this.db.transaction(() => {
-      this.db.run('UPDATE jobs SET saved = ?, dismissed = CASE WHEN ? = 1 THEN 0 ELSE dismissed END WHERE id = ?', [
-        saved ? 1 : 0,
-        saved ? 1 : 0,
-        id
-      ])
+      this.db.run(
+        'UPDATE jobs SET saved = ?, dismissed = CASE WHEN ? = 1 THEN 0 ELSE dismissed END WHERE id = ?',
+        [saved ? 1 : 0, saved ? 1 : 0, id]
+      )
       if (saved) {
-        this.db.run('INSERT OR IGNORE INTO saved_jobs (job_id, saved_at) VALUES (?, ?)', [id, new Date().toISOString()])
+        this.db.run('INSERT OR IGNORE INTO saved_jobs (job_id, saved_at) VALUES (?, ?)', [
+          id,
+          new Date().toISOString()
+        ])
       } else {
         this.db.run('DELETE FROM saved_jobs WHERE job_id = ?', [id])
       }
@@ -261,9 +271,16 @@ export class JobsRepo {
       ...base,
       verificationStatus: status,
       lastVerifiedAt: now,
-      verificationNotes: [...(job.verificationNotes ?? []).slice(-4), `${now.slice(0, 10)}: ${note}`]
+      verificationNotes: [
+        ...(job.verificationNotes ?? []).slice(-4),
+        `${now.slice(0, 10)}: ${note}`
+      ]
     }
-    this.db.run('UPDATE jobs SET verification_status = ?, data = ? WHERE id = ?', [status, JSON.stringify(data), id])
+    this.db.run('UPDATE jobs SET verification_status = ?, data = ? WHERE id = ?', [
+      status,
+      JSON.stringify(data),
+      id
+    ])
   }
 
   /** Marks jobs not seen recently as STALE; never deletes jobs referenced by applications or saves. */
@@ -292,16 +309,24 @@ export class JobsRepo {
     return n
   }
 
-  stats(sinceIso: string, strongThreshold: number) {
-    const q = (sql: string, p: (string | number)[] = []) => this.db.get<{ n: number }>(sql, p)?.n ?? 0
+  stats(
+    sinceIso: string,
+    strongThreshold: number
+  ): { total: number; newJobs: number; verified: number; strong: number; saved: number } {
+    const q = (sql: string, p: (string | number)[] = []): number =>
+      this.db.get<{ n: number }>(sql, p)?.n ?? 0
     const base = 'FROM jobs WHERE legacy = 0 AND is_demo = 0'
     return {
       total: q(`SELECT COUNT(*) AS n ${base} AND dismissed = 0`),
-      newJobs: q(`SELECT COUNT(*) AS n ${base} AND dismissed = 0 AND discovered_at >= ?`, [sinceIso]),
+      newJobs: q(`SELECT COUNT(*) AS n ${base} AND dismissed = 0 AND discovered_at >= ?`, [
+        sinceIso
+      ]),
       verified: q(
         `SELECT COUNT(*) AS n ${base} AND dismissed = 0 AND verification_status IN ('SOURCE_CONFIRMED','EMPLOYER_CONFIRMED')`
       ),
-      strong: q(`SELECT COUNT(*) AS n ${base} AND dismissed = 0 AND match_score >= ?`, [strongThreshold]),
+      strong: q(`SELECT COUNT(*) AS n ${base} AND dismissed = 0 AND match_score >= ?`, [
+        strongThreshold
+      ]),
       saved: q(`SELECT COUNT(*) AS n ${base} AND saved = 1`)
     }
   }

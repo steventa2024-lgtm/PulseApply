@@ -71,10 +71,11 @@ export class SearchService {
       matching: MatchingService
     }
   ) {
-    for (const p of deps.providers) for (const h of p.hosts) deps.http.setHostInterval(h, p.rateLimit.minIntervalMs)
+    for (const p of deps.providers)
+      for (const h of p.hosts) deps.http.setHostInterval(h, p.rateLimit.minIntervalMs)
   }
 
-  private secret = (key: string) => this.deps.store.secrets.get(key)
+  private secret = (key: string): string | undefined => this.deps.store.secrets.get(key)
 
   providerInfos(): ProviderInfo[] {
     const { store } = this.deps
@@ -82,7 +83,10 @@ export class SearchService {
       const enabled = store.providers.isEnabled(p.id, p.defaultEnabled)
       const health = store.providers.health(p.id)
       const missing = missingCredentials(p, this.secret)
-      const employerCount = p.kind === 'ats' || p.kind === 'employer_site' ? store.employers.list(p.id === 'careerpages' ? 'jsonld' : (p.id as never)).length : 0
+      const employerCount =
+        p.kind === 'ats' || p.kind === 'employer_site'
+          ? store.employers.list(p.id === 'careerpages' ? 'jsonld' : (p.id as never)).length
+          : 0
       let status: ProviderInfo['status']
       let detail: string
       if (p.manualOnly) {
@@ -100,7 +104,10 @@ export class SearchService {
       } else if ((p.kind === 'ats' || p.kind === 'employer_site') && employerCount === 0) {
         status = 'AVAILABLE'
         detail = 'No employers registered yet — add career pages on the Sources page.'
-      } else if (health.lastErrorAt && (!health.lastSuccessAt || health.lastErrorAt > health.lastSuccessAt)) {
+      } else if (
+        health.lastErrorAt &&
+        (!health.lastSuccessAt || health.lastErrorAt > health.lastSuccessAt)
+      ) {
         status = 'ERROR'
         detail = health.lastError ?? 'Last request failed'
       } else if (health.lastSuccessAt) {
@@ -108,9 +115,11 @@ export class SearchService {
         detail = `Last successful fetch ${new Date(health.lastSuccessAt).toLocaleString()}`
       } else {
         status = 'AVAILABLE'
-        detail = p.kind === 'discovery' ? 'Ready for employer discovery.' : 'Ready; not queried yet.'
+        detail =
+          p.kind === 'discovery' ? 'Ready for employer discovery.' : 'Ready; not queried yet.'
       }
-      if (p.kind === 'ats' || p.kind === 'employer_site') detail += ` (${employerCount} employer${employerCount === 1 ? '' : 's'})`
+      if (p.kind === 'ats' || p.kind === 'employer_site')
+        detail += ` (${employerCount} employer${employerCount === 1 ? '' : 's'})`
       const configured: Record<string, boolean> = {}
       for (const c of p.credentials) configured[c.key] = !!this.secret(c.key)
       return {
@@ -143,7 +152,11 @@ export class SearchService {
     const loc = criteria.location ?? intent.locationText ?? ''
     return this.deps.providers
       .filter((p) => p.manualOnly)
-      .map((p) => ({ providerId: p.id, name: p.name, url: manualSearchUrl(p, intent.keywords[0] ?? criteria.query, loc, criteria.country) ?? '' }))
+      .map((p) => ({
+        providerId: p.id,
+        name: p.name,
+        url: manualSearchUrl(p, intent.keywords[0] ?? criteria.query, loc, criteria.country) ?? ''
+      }))
       .filter((l) => l.url)
   }
 
@@ -177,11 +190,24 @@ export class SearchService {
     const runId = store.searches.startRun(opts.searchId ?? null, opts.trigger)
     const controller = new AbortController()
     this.running.set(runId, controller)
-    const signal = opts.signal ? AbortSignal.any([opts.signal, controller.signal]) : controller.signal
+    const signal = opts.signal
+      ? AbortSignal.any([opts.signal, controller.signal])
+      : controller.signal
     const startedAt = new Date().toISOString()
-    const emit = (p: Omit<SearchProgress, 'runId'>) => opts.onProgress?.({ runId, ...p })
-    const stats: SearchStats = { providers: [], fetched: 0, normalized: 0, rejectedMalformed: 0, excluded: {}, duplicatesMerged: 0, returned: 0, newJobs: 0 }
-    const exclude = (r: ExclusionReason) => (stats.excluded[r] = (stats.excluded[r] ?? 0) + 1)
+    const emit = (p: Omit<SearchProgress, 'runId'>): void | undefined =>
+      opts.onProgress?.({ runId, ...p })
+    const stats: SearchStats = {
+      providers: [],
+      fetched: 0,
+      normalized: 0,
+      rejectedMalformed: 0,
+      excluded: {},
+      duplicatesMerged: 0,
+      returned: 0,
+      newJobs: 0
+    }
+    const exclude = (r: ExclusionReason): number =>
+      (stats.excluded[r] = (stats.excluded[r] ?? 0) + 1)
 
     try {
       // ---- 1. interpret -----------------------------------------------------
@@ -198,12 +224,20 @@ export class SearchService {
         emit({ phase: 'resolving_location', message: `Locating “${intent.locationText}”…` })
         const place = await geo.resolveSearchLocation(intent.locationText, signal)
         if (place.precision === 'none') {
-          intent.notes.push(`Could not recognise the location “${intent.locationText}”. Results cannot be filtered by distance.`)
+          intent.notes.push(
+            `Could not recognise the location “${intent.locationText}”. Results cannot be filtered by distance.`
+          )
         } else intent.location = place
       }
       const country = criteria.country ?? intent.location?.country
-      if (criteria.country && intent.location?.country && criteria.country !== intent.location.country) {
-        intent.notes.push(`Location “${intent.location.label}” is not in the selected country ${criteria.country}; the location wins.`)
+      if (
+        criteria.country &&
+        intent.location?.country &&
+        criteria.country !== intent.location.country
+      ) {
+        intent.notes.push(
+          `Location “${intent.location.label}” is not in the selected country ${criteria.country}; the location wins.`
+        )
       }
 
       const query: ProviderQuery = {
@@ -227,8 +261,21 @@ export class SearchService {
         if (p.manualOnly || p.kind === 'discovery') continue
         if (criteria.providerIds?.length && !criteria.providerIds.includes(p.id)) continue
         const report = (status: ProviderRunReport['status'], reason: string): void => {
-          stats.providers.push({ providerId: p.id, providerName: p.name, status, reason, fetched: 0, normalized: 0, rejected: 0, durationMs: 0 })
-          emit({ phase: 'searching_providers', message: `${p.name}: ${reason}`, provider: { id: p.id, name: p.name, status: 'skipped', error: reason } })
+          stats.providers.push({
+            providerId: p.id,
+            providerName: p.name,
+            status,
+            reason,
+            fetched: 0,
+            normalized: 0,
+            rejected: 0,
+            durationMs: 0
+          })
+          emit({
+            phase: 'searching_providers',
+            message: `${p.name}: ${reason}`,
+            provider: { id: p.id, name: p.name, status: 'skipped', error: reason }
+          })
         }
         if (!store.providers.isEnabled(p.id, p.defaultEnabled)) {
           report('skipped', 'Disabled')
@@ -249,14 +296,22 @@ export class SearchService {
           report('skipped', `Rate-limited until ${new Date(limited).toLocaleTimeString()}`)
           continue
         }
-        if ((p.kind === 'ats' || p.kind === 'employer_site') && store.employers.list(p.id === 'careerpages' ? 'jsonld' : (p.id as never)).filter((e) => e.status !== 'invalid' && e.status !== 'disabled').length === 0) {
+        if (
+          (p.kind === 'ats' || p.kind === 'employer_site') &&
+          store.employers
+            .list(p.id === 'careerpages' ? 'jsonld' : (p.id as never))
+            .filter((e) => e.status !== 'invalid' && e.status !== 'disabled').length === 0
+        ) {
           report('skipped', 'No employers registered')
           continue
         }
         selected.push(p)
       }
 
-      emit({ phase: 'searching_providers', message: `Searching ${selected.length} employment source${selected.length === 1 ? '' : 's'}…` })
+      emit({
+        phase: 'searching_providers',
+        message: `Searching ${selected.length} employment source${selected.length === 1 ? '' : 's'}…`
+      })
       const outcomes = await this.runProviders(selected, query, signal, emit)
       stats.providers.push(...outcomes.map((o) => o.report))
       if (signal.aborted) throw new CancelledError()
@@ -271,7 +326,14 @@ export class SearchService {
           let res
           try {
             const draft = o.provider.normalize(rec)
-            res = draft ? normalizeDraft(draft, { providerId: o.provider.id, providerName: o.provider.name, geo, staleAfterDays }) : { error: 'empty record' }
+            res = draft
+              ? normalizeDraft(draft, {
+                  providerId: o.provider.id,
+                  providerName: o.provider.name,
+                  geo,
+                  staleAfterDays
+                })
+              : { error: 'empty record' }
           } catch (err) {
             res = { error: (err as Error).message }
           }
@@ -281,24 +343,36 @@ export class SearchService {
           } else {
             o.report.rejected++
             stats.rejectedMalformed++
-            log.debug('normalize', `${o.provider.id} rejected record ${rec.sourceJobId}: ${res.error}`)
+            log.debug(
+              'normalize',
+              `${o.provider.id} rejected record ${rec.sourceJobId}: ${res.error}`
+            )
           }
         }
       }
       stats.normalized = normalized.length
 
       // ---- 5. filter ------------------------------------------------------------
-      const minAnnual = intent.minimumSalary ? annualize(intent.minimumSalary, intent.salaryPeriod) : undefined
+      const minAnnual = intent.minimumSalary
+        ? annualize(intent.minimumSalary, intent.salaryPeriod)
+        : undefined
       const excludedCompanies = intent.excludedCompanies.map(normalizeCompany)
-      const kept: (NormalizedJob & { geo: ScoredJob['geo']; relevance: ScoredJob['relevance'] })[] = []
-      const cutoff = intent.postedWithinDays ? Date.now() - intent.postedWithinDays * 86400_000 : undefined
+      const kept: (NormalizedJob & { geo: ScoredJob['geo']; relevance: ScoredJob['relevance'] })[] =
+        []
+      const cutoff = intent.postedWithinDays
+        ? Date.now() - intent.postedWithinDays * 86400_000
+        : undefined
       for (const job of normalized) {
         if (job.verificationStatus === 'EXPIRED') {
           exclude('expired')
           continue
         }
         const rel = computeRelevance(job, intent)
-        if (rel.score === 0 && job.occupation && intent.excludedOccupations.includes(job.occupation.id)) {
+        if (
+          rel.score === 0 &&
+          job.occupation &&
+          intent.excludedOccupations.includes(job.occupation.id)
+        ) {
           exclude('excluded_occupation')
           continue
         }
@@ -306,7 +380,11 @@ export class SearchService {
           exclude('irrelevant_occupation')
           continue
         }
-        if (intent.excludedKeywords.some((k) => k && job.title.toLowerCase().includes(k.toLowerCase()))) {
+        if (
+          intent.excludedKeywords.some(
+            (k) => k && job.title.toLowerCase().includes(k.toLowerCase())
+          )
+        ) {
           exclude('excluded_keyword')
           continue
         }
@@ -319,15 +397,29 @@ export class SearchService {
           exclude(g.exclusion ?? 'unknown_location')
           continue
         }
-        if (intent.employmentTypes.length && job.employmentTypes.length && !job.employmentTypes.some((t) => intent.employmentTypes.includes(t))) {
+        if (
+          intent.employmentTypes.length &&
+          job.employmentTypes.length &&
+          !job.employmentTypes.some((t) => intent.employmentTypes.includes(t))
+        ) {
           exclude('employment_type')
           continue
         }
-        if (intent.seniority.length && job.seniority && intent.seniority.every((s) => s === 'entry' || s === 'junior') && SENIOR_LEVELS.has(job.seniority)) {
+        if (
+          intent.seniority.length &&
+          job.seniority &&
+          intent.seniority.every((s) => s === 'entry' || s === 'junior') &&
+          SENIOR_LEVELS.has(job.seniority)
+        ) {
           exclude('seniority')
           continue
         }
-        if (minAnnual && job.salary && (job.salary.max ?? job.salary.min) && (!intent.currency || !job.salary.currency || job.salary.currency === intent.currency)) {
+        if (
+          minAnnual &&
+          job.salary &&
+          (job.salary.max ?? job.salary.min) &&
+          (!intent.currency || !job.salary.currency || job.salary.currency === intent.currency)
+        ) {
           const top = annualize((job.salary.max ?? job.salary.min)!, job.salary.period)
           if (top !== undefined && top < minAnnual) {
             exclude('salary_below_minimum')
@@ -338,7 +430,11 @@ export class SearchService {
           exclude('too_old')
           continue
         }
-        kept.push({ ...job, geo: { eligibility: g.eligibility, distance: g.distance, unit: g.unit, note: g.note }, relevance: rel })
+        kept.push({
+          ...job,
+          geo: { eligibility: g.eligibility, distance: g.distance, unit: g.unit, note: g.note },
+          relevance: rel
+        })
       }
 
       // ---- 6. dedupe --------------------------------------------------------------
@@ -349,7 +445,10 @@ export class SearchService {
       // Keep ids stable across runs: reuse the id already stored for any of the job's source records.
       const withIds = unique.map((j) => {
         // The merged representative is always one of the kept records, so its id is in the map.
-        const ctx = geoById.get(j.id) ?? { geo: { eligibility: 'unknown' as const }, relevance: { score: RELEVANCE_THRESHOLD, basis: '' } }
+        const ctx = geoById.get(j.id) ?? {
+          geo: { eligibility: 'unknown' as const },
+          relevance: { score: RELEVANCE_THRESHOLD, basis: '' }
+        }
         let id = j.id
         for (const s of j.sources) {
           const existing = store.jobs.findJobIdBySourceRecord(s.providerId, s.sourceJobId)
@@ -377,29 +476,67 @@ export class SearchService {
       const insertedSet = new Set(inserted)
       const persisted = store.jobs
         .list({ ids: scored.map((s) => s.id), view: 'all', limit: 2000, includeDemo: true })
-        .concat(store.jobs.list({ ids: scored.map((s) => s.id), view: 'dismissed', limit: 2000, includeDemo: true }))
+        .concat(
+          store.jobs.list({
+            ids: scored.map((s) => s.id),
+            view: 'dismissed',
+            limit: 2000,
+            includeDemo: true
+          })
+        )
       const byId = new Map(persisted.map((p) => [p.id, p]))
       const final = scored
         .map((s) => ({ ...(byId.get(s.id) ?? s), isNew: insertedSet.has(s.id) }))
-        .sort((a, b) => (b.match?.score ?? -1) - (a.match?.score ?? -1) || b.relevance.score - a.relevance.score)
+        .sort(
+          (a, b) =>
+            (b.match?.score ?? -1) - (a.match?.score ?? -1) || b.relevance.score - a.relevance.score
+        )
       stats.returned = final.filter((f) => !f.state.dismissed).length
 
       for (const o of outcomes) {
-        if (o.report.status === 'ok' || o.report.status === 'cached') store.providers.recordSuccess(o.provider.id, o.report.normalized)
+        if (o.report.status === 'ok' || o.report.status === 'cached')
+          store.providers.recordSuccess(o.provider.id, o.report.normalized)
       }
       const finishedAt = new Date().toISOString()
       store.searches.finishRun(runId, 'ok', stats)
       if (opts.trigger === 'manual') {
-        store.settings.setRaw(LAST_SEARCH_KEY, { runId, criteria, intent, stats, jobIds: final.map((f) => f.id), startedAt, finishedAt })
+        store.settings.setRaw(LAST_SEARCH_KEY, {
+          runId,
+          criteria,
+          intent,
+          stats,
+          jobIds: final.map((f) => f.id),
+          startedAt,
+          finishedAt
+        })
       }
-      emit({ phase: 'done', message: `Found ${stats.returned} matching job${stats.returned === 1 ? '' : 's'} (${stats.newJobs} new).` })
+      emit({
+        phase: 'done',
+        message: `Found ${stats.returned} matching job${stats.returned === 1 ? '' : 's'} (${stats.newJobs} new).`
+      })
       return { runId, intent, stats, jobs: final, cancelled: false, startedAt, finishedAt }
     } catch (err) {
       const cancelled = err instanceof CancelledError || signal.aborted
-      store.searches.finishRun(runId, cancelled ? 'cancelled' : 'error', stats, cancelled ? undefined : (err as Error).message)
-      emit({ phase: cancelled ? 'cancelled' : 'error', message: cancelled ? 'Search cancelled.' : `Search failed: ${(err as Error).message}` })
+      store.searches.finishRun(
+        runId,
+        cancelled ? 'cancelled' : 'error',
+        stats,
+        cancelled ? undefined : (err as Error).message
+      )
+      emit({
+        phase: cancelled ? 'cancelled' : 'error',
+        message: cancelled ? 'Search cancelled.' : `Search failed: ${(err as Error).message}`
+      })
       if (cancelled) {
-        return { runId, intent: buildIntent(criteria), stats, jobs: [], cancelled: true, startedAt, finishedAt: new Date().toISOString() }
+        return {
+          runId,
+          intent: buildIntent(criteria),
+          stats,
+          jobs: [],
+          cancelled: true,
+          startedAt,
+          finishedAt: new Date().toISOString()
+        }
       }
       throw err
     } finally {
@@ -423,10 +560,27 @@ export class SearchService {
         const p = queue.shift()
         if (!p) return
         const t0 = Date.now()
-        const report: ProviderRunReport = { providerId: p.id, providerName: p.name, status: 'ok', fetched: 0, normalized: 0, rejected: 0, durationMs: 0 }
-        const phase = p.kind === 'ats' || p.kind === 'employer_site' ? 'checking_employer_boards' : 'searching_providers'
-        emit({ phase, message: `Querying ${p.name}…`, provider: { id: p.id, name: p.name, status: 'running' } })
-        const relevantEmployers = employers.filter((e) => (p.id === 'careerpages' ? e.atsProvider === 'jsonld' : e.atsProvider === p.id))
+        const report: ProviderRunReport = {
+          providerId: p.id,
+          providerName: p.name,
+          status: 'ok',
+          fetched: 0,
+          normalized: 0,
+          rejected: 0,
+          durationMs: 0
+        }
+        const phase =
+          p.kind === 'ats' || p.kind === 'employer_site'
+            ? 'checking_employer_boards'
+            : 'searching_providers'
+        emit({
+          phase,
+          message: `Querying ${p.name}…`,
+          provider: { id: p.id, name: p.name, status: 'running' }
+        })
+        const relevantEmployers = employers.filter((e) =>
+          p.id === 'careerpages' ? e.atsProvider === 'jsonld' : e.atsProvider === p.id
+        )
         const cacheKey = ProvidersRepo.cacheKey(p.id, {
           k: query.keywords,
           a: query.alternateKeywords,
@@ -453,21 +607,38 @@ export class SearchService {
               employers: relevantEmployers,
               signal: AbortSignal.any([signal, timeout]),
               contactEmail: store.settings.get().contactEmailForApis,
-              onEmployerSynced: (id, status, detail, count) => store.employers.recordSync(id, status, detail, count)
+              onEmployerSynced: (id, status, detail, count) =>
+                store.employers.recordSync(id, status, detail, count)
             })
             store.providers.cacheSet(cacheKey, p.id, records, p.cacheTtlMs)
           }
           report.fetched = records.length
-          emit({ phase, message: `${p.name}: ${records.length} listing${records.length === 1 ? '' : 's'}`, provider: { id: p.id, name: p.name, status: report.status === 'cached' ? 'cached' : 'ok', count: records.length } })
+          emit({
+            phase,
+            message: `${p.name}: ${records.length} listing${records.length === 1 ? '' : 's'}`,
+            provider: {
+              id: p.id,
+              name: p.name,
+              status: report.status === 'cached' ? 'cached' : 'ok',
+              count: records.length
+            }
+          })
         } catch (err) {
           if (signal.aborted) {
             report.status = 'cancelled'
           } else {
             report.status = 'error'
             report.reason = err instanceof RateLimitedError ? err.message : (err as Error).message
-            const until = err instanceof RateLimitedError && err.retryAfterMs ? new Date(Date.now() + err.retryAfterMs).toISOString() : undefined
+            const until =
+              err instanceof RateLimitedError && err.retryAfterMs
+                ? new Date(Date.now() + err.retryAfterMs).toISOString()
+                : undefined
             store.providers.recordError(p.id, report.reason, until)
-            emit({ phase, message: `${p.name} failed: ${report.reason}`, provider: { id: p.id, name: p.name, status: 'error', error: report.reason } })
+            emit({
+              phase,
+              message: `${p.name} failed: ${report.reason}`,
+              provider: { id: p.id, name: p.name, status: 'error', error: report.reason }
+            })
           }
           records = []
         }
@@ -475,16 +646,29 @@ export class SearchService {
         outcomes.push({ provider: p, records, report })
       }
     }
-    await Promise.allSettled(Array.from({ length: Math.min(PROVIDER_CONCURRENCY, providers.length) }, worker))
+    await Promise.allSettled(
+      Array.from({ length: Math.min(PROVIDER_CONCURRENCY, providers.length) }, worker)
+    )
     return outcomes
   }
 
-  lastSearch(): { runId: string; criteria: SearchCriteria; intent: SearchIntent; stats: SearchStats; jobIds: string[]; finishedAt: string } | undefined {
+  lastSearch():
+    | {
+        runId: string
+        criteria: SearchCriteria
+        intent: SearchIntent
+        stats: SearchStats
+        jobIds: string[]
+        finishedAt: string
+      }
+    | undefined {
     return this.deps.store.settings.getRaw(LAST_SEARCH_KEY, undefined)
   }
 
   /** Occupations known to the taxonomy (for the search form). */
   static occupations(): { id: string; label: string }[] {
-    return [...OCCUPATION_BY_ID.values()].map((o) => ({ id: o.id, label: o.label })).sort((a, b) => a.label.localeCompare(b.label))
+    return [...OCCUPATION_BY_ID.values()]
+      .map((o) => ({ id: o.id, label: o.label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
   }
 }

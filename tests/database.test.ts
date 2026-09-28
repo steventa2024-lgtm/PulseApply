@@ -9,7 +9,12 @@ const LEGACY = {
   profile: {
     fileName: 'resume.pdf',
     rawText: 'Jordan Rivera\nWarehouse Associate\nInventory Management',
-    contact: { fullName: 'Jordan Rivera', email: 'jordan@example.com', phone: '562-555-0147', location: 'Lakewood, CA' },
+    contact: {
+      fullName: 'Jordan Rivera',
+      email: 'jordan@example.com',
+      phone: '562-555-0147',
+      location: 'Lakewood, CA'
+    },
     extractedSkills: ['Inventory Management', 'Warehouse Operations'],
     detectedRoles: ['Warehouse / Office Manager'],
     wordCount: 6,
@@ -26,11 +31,59 @@ const LEGACY = {
     workAuthorization: 'US Citizen',
     resumeFilePath: '/nonexistent/resume.pdf'
   },
-  settings: { minScoreThreshold: 75, cronIntervalHours: 3, targetRoles: ['Warehouse / Office Manager'], targetLocation: 'Lakewood, CA', hitlApprovalRequired: true },
+  settings: {
+    minScoreThreshold: 75,
+    cronIntervalHours: 3,
+    targetRoles: ['Warehouse / Office Manager'],
+    targetLocation: 'Lakewood, CA',
+    hitlApprovalRequired: true
+  },
   jobs: [
-    { id: 'job_lakewood_101', title: 'Warehouse & Operations Lead', company: 'Pacific Freight Logistics', location: 'Long Beach, CA', source: 'Indeed', url: 'https://indeed.com', description: 'x', requiredSkills: [], matchScore: 96, matchedSkills: [], missingSkills: [], discoveredAt: '2026-09-20T00:00:00.000Z', status: 'applied' },
-    { id: 'job_lakewood_102', title: 'Lead Barista', company: 'Roast & Steam', location: 'Lakewood, CA', source: 'Indeed', url: 'https://indeed.com', description: 'x', requiredSkills: [], matchScore: 90, matchedSkills: [], missingSkills: [], discoveredAt: '2026-09-20T00:00:00.000Z', status: 'dismissed' },
-    { id: 'job_lakewood_103', title: 'Office Coordinator', company: 'Apex', location: 'Cerritos, CA', source: 'LinkedIn', url: 'https://linkedin.com', description: 'x', requiredSkills: [], matchScore: 80, matchedSkills: [], missingSkills: [], discoveredAt: '2026-09-20T00:00:00.000Z', status: 'queued' }
+    {
+      id: 'job_lakewood_101',
+      title: 'Warehouse & Operations Lead',
+      company: 'Pacific Freight Logistics',
+      location: 'Long Beach, CA',
+      source: 'Indeed',
+      url: 'https://indeed.com',
+      description: 'x',
+      requiredSkills: [],
+      matchScore: 96,
+      matchedSkills: [],
+      missingSkills: [],
+      discoveredAt: '2026-09-20T00:00:00.000Z',
+      status: 'applied'
+    },
+    {
+      id: 'job_lakewood_102',
+      title: 'Lead Barista',
+      company: 'Roast & Steam',
+      location: 'Lakewood, CA',
+      source: 'Indeed',
+      url: 'https://indeed.com',
+      description: 'x',
+      requiredSkills: [],
+      matchScore: 90,
+      matchedSkills: [],
+      missingSkills: [],
+      discoveredAt: '2026-09-20T00:00:00.000Z',
+      status: 'dismissed'
+    },
+    {
+      id: 'job_lakewood_103',
+      title: 'Office Coordinator',
+      company: 'Apex',
+      location: 'Cerritos, CA',
+      source: 'LinkedIn',
+      url: 'https://linkedin.com',
+      description: 'x',
+      requiredSkills: [],
+      matchScore: 80,
+      matchedSkills: [],
+      missingSkills: [],
+      discoveredAt: '2026-09-20T00:00:00.000Z',
+      status: 'queued'
+    }
   ]
 }
 
@@ -38,15 +91,26 @@ describe('legacy JSON migration', () => {
   it('backs up, imports honestly, and is idempotent', async () => {
     const dir = tmpDir()
     const legacyPath = path.join(dir, 'pulseapply_db.json')
-    fs.writeFileSync(legacyPath, '﻿' + JSON.stringify(LEGACY))
+    fs.writeFileSync(legacyPath, '\uFEFF' + JSON.stringify(LEGACY))
     const original = fs.readFileSync(legacyPath)
 
     const { svc } = await makeServices({ userDataDir: dir })
-    const report = svc.store.settings.getRaw<{ performed: boolean; backupPath: string; imported: Record<string, unknown>; notes: string[] }>('legacy_import_report', null as never)
+    const report = svc.store.settings.getRaw<{
+      performed: boolean
+      backupPath: string
+      imported: Record<string, unknown>
+      notes: string[]
+    }>('legacy_import_report', null as never)
     expect(report.performed).toBe(true)
     expect(fs.readFileSync(report.backupPath).equals(original)).toBe(true)
     expect(fs.readFileSync(legacyPath).equals(original)).toBe(true) // never modified
-    expect(report.imported).toMatchObject({ candidate: true, profile: true, jobs: 3, applications: 1, settings: true })
+    expect(report.imported).toMatchObject({
+      candidate: true,
+      profile: true,
+      jobs: 3,
+      applications: 1,
+      settings: true
+    })
 
     const p = svc.store.candidate.get()
     expect(p.fullName).toMatchObject({ value: 'Jordan Rivera', confirmed: false })
@@ -92,7 +156,9 @@ describe('SQLite persistence', () => {
   it('enforces foreign keys', async () => {
     const db = await AppDb.open(null)
     expect(() =>
-      db.run("INSERT INTO applications (id, job_id, state, adapter, source_url, origin, created_at, updated_at) VALUES ('x', 'missing', 'QUEUED', 'generic', 'https://e.com', 'desktop', 'n', 'n')")
+      db.run(
+        "INSERT INTO applications (id, job_id, state, adapter, source_url, origin, created_at, updated_at) VALUES ('x', 'missing', 'QUEUED', 'generic', 'https://e.com', 'desktop', 'n', 'n')"
+      )
     ).toThrow(/FOREIGN KEY/)
   })
 
@@ -106,7 +172,9 @@ describe('SQLite persistence', () => {
     db.close()
     expect(fs.existsSync(file + '.prev')).toBe(true)
     const reopened = await AppDb.open(file)
-    expect(reopened.get<{ value: string }>("SELECT value FROM settings WHERE key = 'k'")!.value).toBe('"v2"')
+    expect(
+      reopened.get<{ value: string }>("SELECT value FROM settings WHERE key = 'k'")!.value
+    ).toBe('"v2"')
     expect(reopened.schemaVersion).toBe(1)
     // Recovery from a missing primary file.
     reopened.close()
@@ -138,13 +206,25 @@ describe('SQLite persistence', () => {
     svc.store.db.run(
       "INSERT INTO jobs (id, canonical_key, data, title, company, source, discovered_at, last_seen_at, verification_status) VALUES ('j1', 'k', '{}', 'T', 'C', 's', 'n', 'n', 'SOURCE_CONFIRMED')"
     )
-    const app = svc.store.applications.create({ jobId: 'j1', state: 'OPENING', adapter: 'generic', sourceUrl: 'https://e.com', origin: 'desktop', message: 'open' })
+    const app = svc.store.applications.create({
+      jobId: 'j1',
+      state: 'OPENING',
+      adapter: 'generic',
+      sourceUrl: 'https://e.com',
+      origin: 'desktop',
+      message: 'open'
+    })
     svc.store.applications.transition(app.id, 'MANUAL_COMPLETION_REQUIRED', 'manual')
     await svc.shutdown()
     const { svc: again } = await makeServices({ userDataDir: dir })
     expect(again.store.applications.get(app.id)!.state).toBe('MANUAL_COMPLETION_REQUIRED')
-    expect(again.store.applications.events(app.id).map((e) => e.toState)).toEqual(['OPENING', 'MANUAL_COMPLETION_REQUIRED'])
-    expect(() => again.store.applications.transition(app.id, 'APPROVED', 'x')).toThrow(/cannot move/)
+    expect(again.store.applications.events(app.id).map((e) => e.toState)).toEqual([
+      'OPENING',
+      'MANUAL_COMPLETION_REQUIRED'
+    ])
+    expect(() => again.store.applications.transition(app.id, 'APPROVED', 'x')).toThrow(
+      /cannot move/
+    )
     await again.shutdown()
   })
 })

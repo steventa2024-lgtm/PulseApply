@@ -58,7 +58,12 @@ export class TelegramApi {
     private readonly fetchImpl: typeof fetch = fetch
   ) {}
 
-  async call<T>(method: string, params: Record<string, unknown> = {}, signal?: AbortSignal, timeoutMs = 15_000): Promise<T> {
+  async call<T>(
+    method: string,
+    params: Record<string, unknown> = {},
+    signal?: AbortSignal,
+    timeoutMs = 15_000
+  ): Promise<T> {
     const timeout = AbortSignal.timeout(timeoutMs)
     const s = signal ? AbortSignal.any([signal, timeout]) : timeout
     let res: Response
@@ -71,16 +76,31 @@ export class TelegramApi {
       })
     } catch (err) {
       if (signal?.aborted) throw err
-      throw new TelegramError(timeout.aborted ? 'Telegram request timed out' : `Network error contacting Telegram: ${(err as Error).message}`, 0)
+      throw new TelegramError(
+        timeout.aborted
+          ? 'Telegram request timed out'
+          : `Network error contacting Telegram: ${(err as Error).message}`,
+        0
+      )
     }
-    let body: { ok: boolean; result?: T; description?: string; error_code?: number; parameters?: { retry_after?: number } }
+    let body: {
+      ok: boolean
+      result?: T
+      description?: string
+      error_code?: number
+      parameters?: { retry_after?: number }
+    }
     try {
       body = await res.json()
     } catch {
       throw new TelegramError(`Telegram returned HTTP ${res.status}`, res.status)
     }
     if (!body.ok) {
-      throw new TelegramError(body.description ?? `Telegram error ${res.status}`, body.error_code ?? res.status, body.parameters?.retry_after)
+      throw new TelegramError(
+        body.description ?? `Telegram error ${res.status}`,
+        body.error_code ?? res.status,
+        body.parameters?.retry_after
+      )
     }
     return body.result as T
   }
@@ -98,7 +118,12 @@ export class TelegramApi {
   }
 
   getUpdates(offset: number, timeoutSec: number, signal: AbortSignal): Promise<TgUpdate[]> {
-    return this.call('getUpdates', { offset, timeout: timeoutSec, allowed_updates: ['message', 'callback_query'] }, signal, (timeoutSec + 15) * 1000)
+    return this.call(
+      'getUpdates',
+      { offset, timeout: timeoutSec, allowed_updates: ['message', 'callback_query'] },
+      signal,
+      (timeoutSec + 15) * 1000
+    )
   }
 
   sendMessage(chatId: string, text: string, keyboard?: InlineButton[][]): Promise<TgMessage> {
@@ -112,7 +137,11 @@ export class TelegramApi {
   }
 
   answerCallbackQuery(id: string, text: string): Promise<boolean> {
-    return this.call('answerCallbackQuery', { callback_query_id: id, text: text.slice(0, 200), show_alert: false })
+    return this.call('answerCallbackQuery', {
+      callback_query_id: id,
+      text: text.slice(0, 200),
+      show_alert: false
+    })
   }
 }
 

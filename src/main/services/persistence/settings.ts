@@ -18,7 +18,12 @@ function deepMerge<T>(base: T, patch: unknown): T {
   for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
     const b = out[k]
     out[k] =
-      b && typeof b === 'object' && !Array.isArray(b) && v && typeof v === 'object' && !Array.isArray(v)
+      b &&
+      typeof b === 'object' &&
+      !Array.isArray(b) &&
+      v &&
+      typeof v === 'object' &&
+      !Array.isArray(v)
         ? deepMerge(b, v)
         : v
   }

@@ -70,7 +70,8 @@ export type EmploymentType =
   | 'per_diem'
   | 'volunteer'
 
-export type Seniority = 'entry' | 'junior' | 'mid' | 'senior' | 'lead' | 'manager' | 'director' | 'executive'
+export type Seniority =
+  'entry' | 'junior' | 'mid' | 'senior' | 'lead' | 'manager' | 'director' | 'executive'
 
 export type SalaryPeriod = 'hour' | 'day' | 'week' | 'month' | 'year'
 
@@ -91,7 +92,8 @@ export type VerificationStatus =
   | 'REMOVED'
   | 'VERIFICATION_FAILED'
 
-export type ApplicationSupport = 'greenhouse' | 'lever' | 'ashby' | 'smartrecruiters' | 'generic' | 'manual'
+export type ApplicationSupport =
+  'greenhouse' | 'lever' | 'ashby' | 'smartrecruiters' | 'generic' | 'manual'
 
 export interface JobSourceRecord {
   providerId: string
@@ -298,7 +300,13 @@ export interface SearchProgress {
   runId: string
   phase: SearchPhase
   message: string
-  provider?: { id: string; name: string; status: 'running' | 'ok' | 'cached' | 'error' | 'skipped'; count?: number; error?: string }
+  provider?: {
+    id: string
+    name: string
+    status: 'running' | 'ok' | 'cached' | 'error' | 'skipped'
+    count?: number
+    error?: string
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +363,14 @@ export interface CredentialField {
 export interface ProviderInfo {
   id: string
   name: string
-  kind: 'remote_board' | 'aggregator' | 'government' | 'ats' | 'employer_site' | 'restricted' | 'discovery'
+  kind:
+    | 'remote_board'
+    | 'aggregator'
+    | 'government'
+    | 'ats'
+    | 'employer_site'
+    | 'restricted'
+    | 'discovery'
   description: string
   markets: string
   status: ProviderStatus
@@ -530,13 +545,19 @@ export type ApplicationState =
 
 export interface FieldIssue {
   label: string
-  reason: 'unknown_question' | 'sensitive_requires_user' | 'required_empty' | 'unsupported_input' | 'no_profile_value'
+  reason:
+    | 'unknown_question'
+    | 'sensitive_requires_user'
+    | 'required_empty'
+    | 'unsupported_input'
+    | 'no_profile_value'
   required: boolean
   type: string
 }
 
 export interface SubmissionEvidence {
-  kind: 'confirmation_url' | 'confirmation_text' | 'reference_number' | 'ats_response' | 'user_report'
+  kind:
+    'confirmation_url' | 'confirmation_text' | 'reference_number' | 'ats_response' | 'user_report'
   detail: string
   url?: string
   observedAt: string
@@ -653,7 +674,13 @@ export interface DashboardStats {
 export interface MigrationReport {
   performed: boolean
   backupPath?: string
-  imported: { candidate: boolean; profile: boolean; jobs: number; applications: number; settings: boolean }
+  imported: {
+    candidate: boolean
+    profile: boolean
+    jobs: number
+    applications: number
+    settings: boolean
+  }
   notes: string[]
   at: string
 }

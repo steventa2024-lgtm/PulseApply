@@ -26,9 +26,11 @@ export function extractJsonLd(html: string): Json[] {
         if (!node || typeof node !== 'object') continue
         const obj = node as Json
         if (Array.isArray(obj['@graph'])) stack.push(...(obj['@graph'] as unknown[]))
-        if (Array.isArray(obj.itemListElement)) stack.push(...(obj.itemListElement as unknown[]).map((i) => (i as Json)?.item ?? i))
+        if (Array.isArray(obj.itemListElement))
+          stack.push(...(obj.itemListElement as unknown[]).map((i) => (i as Json)?.item ?? i))
         const type = obj['@type']
-        if (type === 'JobPosting' || (Array.isArray(type) && type.includes('JobPosting'))) out.push(obj)
+        if (type === 'JobPosting' || (Array.isArray(type) && type.includes('JobPosting')))
+          out.push(obj)
       }
     } catch {
       // malformed JSON-LD block: ignore
@@ -38,17 +40,33 @@ export function extractJsonLd(html: string): Json[] {
 }
 
 const TYPE_MAP: Record<string, EmploymentType> = {
-  FULL_TIME: 'full_time', PART_TIME: 'part_time', CONTRACTOR: 'contract', TEMPORARY: 'temporary', INTERN: 'internship',
-  PER_DIEM: 'per_diem', VOLUNTEER: 'volunteer', SEASONAL: 'seasonal'
+  FULL_TIME: 'full_time',
+  PART_TIME: 'part_time',
+  CONTRACTOR: 'contract',
+  TEMPORARY: 'temporary',
+  INTERN: 'internship',
+  PER_DIEM: 'per_diem',
+  VOLUNTEER: 'volunteer',
+  SEASONAL: 'seasonal'
 }
 
-const UNIT_MAP: Record<string, SalaryPeriod> = { HOUR: 'hour', DAY: 'day', WEEK: 'week', MONTH: 'month', YEAR: 'year' }
+const UNIT_MAP: Record<string, SalaryPeriod> = {
+  HOUR: 'hour',
+  DAY: 'day',
+  WEEK: 'week',
+  MONTH: 'month',
+  YEAR: 'year'
+}
 
 function asArray<T>(v: T | T[] | undefined): T[] {
   return v === undefined || v === null ? [] : Array.isArray(v) ? v : [v]
 }
 
-export function jobPostingToDraft(jp: Json, pageUrl: string, fallbackCompany: string): DraftJob | null {
+export function jobPostingToDraft(
+  jp: Json,
+  pageUrl: string,
+  fallbackCompany: string
+): DraftJob | null {
   const title = str(jp.title)
   if (!title) return null
   const org = jp.hiringOrganization as Json | undefined
@@ -59,25 +77,45 @@ export function jobPostingToDraft(jp: Json, pageUrl: string, fallbackCompany: st
   const places = asArray(jp.jobLocation as Json | Json[]).map((loc) => {
     const addr = (loc?.address ?? {}) as Json
     const geo = (loc?.geo ?? {}) as Json
-    const countryRaw = typeof addr.addressCountry === 'object' ? str((addr.addressCountry as Json).name) : str(addr.addressCountry)
+    const countryRaw =
+      typeof addr.addressCountry === 'object'
+        ? str((addr.addressCountry as Json).name)
+        : str(addr.addressCountry)
     const lat = num(geo.latitude)
     const lon = geo.longitude !== undefined ? Number(geo.longitude) : undefined
     return {
       city: str(addr.addressLocality),
       region: str(addr.addressRegion),
-      country: countryRaw ? (lookupCountry(countryRaw) ?? (countryRaw.length === 2 ? countryRaw.toUpperCase() : undefined)) : undefined,
-      coordinates: lat !== undefined && lon !== undefined && Number.isFinite(lon) ? { lat, lon } : undefined,
-      label: [str(addr.addressLocality), str(addr.addressRegion), countryRaw].filter(Boolean).join(', ')
+      country: countryRaw
+        ? (lookupCountry(countryRaw) ??
+          (countryRaw.length === 2 ? countryRaw.toUpperCase() : undefined))
+        : undefined,
+      coordinates:
+        lat !== undefined && lon !== undefined && Number.isFinite(lon) ? { lat, lon } : undefined,
+      label: [str(addr.addressLocality), str(addr.addressRegion), countryRaw]
+        .filter(Boolean)
+        .join(', ')
     }
   })
   const telecommute = String(jp.jobLocationType ?? '').toUpperCase() === 'TELECOMMUTE'
-  const workModes: WorkMode[] | undefined = telecommute ? (places.length ? ['remote', 'hybrid'] : ['remote']) : places.length ? ['onsite'] : undefined
-  const applicantReq = asArray(jp.applicantLocationRequirements as Json | Json[]).map((r) => str(r?.name)).filter(Boolean).join(', ')
+  const workModes: WorkMode[] | undefined = telecommute
+    ? places.length
+      ? ['remote', 'hybrid']
+      : ['remote']
+    : places.length
+      ? ['onsite']
+      : undefined
+  const applicantReq = asArray(jp.applicantLocationRequirements as Json | Json[])
+    .map((r) => str(r?.name))
+    .filter(Boolean)
+    .join(', ')
   const base = jp.baseSalary as Json | undefined
   const value = (base?.value ?? {}) as Json
   const min = num(value.minValue) ?? num(value.value)
   const max = num(value.maxValue)
-  const types = asArray(jp.employmentType as string | string[]).map((t) => TYPE_MAP[String(t).toUpperCase().replace(/[- ]/g, '_')]).filter(Boolean)
+  const types = asArray(jp.employmentType as string | string[])
+    .map((t) => TYPE_MAP[String(t).toUpperCase().replace(/[- ]/g, '_')])
+    .filter(Boolean)
   return {
     sourceJobId: idValue ?? url,
     sourceUrl: url,
@@ -86,12 +124,24 @@ export function jobPostingToDraft(jp: Json, pageUrl: string, fallbackCompany: st
     company,
     companyWebsite: str(org?.sameAs) ?? str(org?.url),
     descriptionHtml: str(jp.description),
-    locationText: places.map((p) => p.label).filter(Boolean).join('; ') || (telecommute ? 'Remote' : ''),
+    locationText:
+      places
+        .map((p) => p.label)
+        .filter(Boolean)
+        .join('; ') || (telecommute ? 'Remote' : ''),
     places: places.filter((p) => p.city || p.country || p.coordinates),
     workModes,
     remoteEligibilityText: telecommute ? applicantReq || undefined : undefined,
     employmentTypes: types.length ? types : undefined,
-    salary: min || max ? { min, max, currency: str(base?.currency), period: UNIT_MAP[String(value.unitText ?? '').toUpperCase()] } : undefined,
+    salary:
+      min || max
+        ? {
+            min,
+            max,
+            currency: str(base?.currency),
+            period: UNIT_MAP[String(value.unitText ?? '').toUpperCase()]
+          }
+        : undefined,
     postedAt: isoFromString(jp.datePosted),
     expiresAt: isoFromString(jp.validThrough),
     employerDirect: true
@@ -99,7 +149,8 @@ export function jobPostingToDraft(jp: Json, pageUrl: string, fallbackCompany: st
 }
 
 const JOB_LINK_RE = /href\s*=\s*["']([^"'#]+)["']/gi
-const JOB_PATH_RE = /\/(jobs?|careers?|positions?|openings?|vacanc(y|ies)|opportunit(y|ies)|stellen|emplois?|empleos?)\b[^?#]*[/-][\w-]*\d|\/(job|position|posting|requisition|req)[/-]/i
+const JOB_PATH_RE =
+  /\/(jobs?|careers?|positions?|openings?|vacanc(y|ies)|opportunit(y|ies)|stellen|emplois?|empleos?)\b[^?#]*[/-][\w-]*\d|\/(job|position|posting|requisition|req)[/-]/i
 
 /** Collects same-site links that look like individual job pages. */
 export function candidateJobLinks(html: string, pageUrl: string, limit = 20): string[] {
@@ -120,15 +171,32 @@ export function candidateJobLinks(html: string, pageUrl: string, limit = 20): st
   return [...out]
 }
 
-async function fetchPage(http: HttpClient, url: string, signal: AbortSignal): Promise<string | null> {
+async function fetchPage(
+  http: HttpClient,
+  url: string,
+  signal: AbortSignal
+): Promise<string | null> {
   const u = await assertPublicUrl(url)
   const rules = await robotsFor(http, u.origin, signal)
   if (!isAllowed(rules, u.pathname + u.search)) return null
-  const res = await http.request({ url: u.toString(), signal, timeoutMs: 15_000, retries: 1, maxBytes: 3 * 1024 * 1024, headers: { Accept: 'text/html,application/xhtml+xml' } })
+  const res = await http.request({
+    url: u.toString(),
+    signal,
+    timeoutMs: 15_000,
+    retries: 1,
+    maxBytes: 3 * 1024 * 1024,
+    headers: { Accept: 'text/html,application/xhtml+xml' }
+  })
   return res.text
 }
 
-export async function crawlCareerPage(http: HttpClient, careersUrl: string, company: string, signal: AbortSignal, pageBudget = 20): Promise<{ drafts: DraftJob[]; pagesFetched: number; blockedByRobots: boolean }> {
+export async function crawlCareerPage(
+  http: HttpClient,
+  careersUrl: string,
+  company: string,
+  signal: AbortSignal,
+  pageBudget = 20
+): Promise<{ drafts: DraftJob[]; pagesFetched: number; blockedByRobots: boolean }> {
   const drafts: DraftJob[] = []
   const html = await fetchPage(http, careersUrl, signal)
   if (html === null) return { drafts, pagesFetched: 0, blockedByRobots: true }
@@ -160,30 +228,51 @@ export const careerPagesProvider: JobProvider = {
   id: 'careerpages',
   name: 'Employer career pages',
   kind: 'employer_site',
-  description: 'Career pages you add that publish structured JobPosting data (the format used by search engines).',
+  description:
+    'Career pages you add that publish structured JobPosting data (the format used by search engines).',
   markets: 'Any employer career site you add',
-  termsNote: 'Only pages allowed by the site’s robots.txt are fetched; at most 20 pages per site per search.',
+  termsNote:
+    'Only pages allowed by the site’s robots.txt are fetched; at most 20 pages per site per search.',
   credentials: [],
   defaultEnabled: true,
-  rateLimit: { minIntervalMs: 1000, note: 'One site at a time, 1 request/second per host, cached 3 hours.' },
+  rateLimit: {
+    minIntervalMs: 1000,
+    note: 'One site at a time, 1 request/second per host, cached 3 hours.'
+  },
   cacheTtlMs: 3 * 60 * 60_000,
   timeoutMs: 60_000,
   hosts: [],
   supports: () => ({ ok: true }),
   isConfigured: () => true,
   async fetch(q, ctx) {
-    const employers = ctx.employers.filter((e) => e.atsProvider === 'jsonld' && e.status !== 'invalid' && e.status !== 'disabled')
+    const employers = ctx.employers.filter(
+      (e) => e.atsProvider === 'jsonld' && e.status !== 'invalid' && e.status !== 'disabled'
+    )
     const out: RawRecord[] = []
     const phrases = [q.keywords, ...q.alternateKeywords].filter(Boolean)
     for (const e of employers) {
       if (ctx.signal.aborted) break
       try {
-        const { drafts, blockedByRobots } = await crawlCareerPage(ctx.http, e.boardId, e.name, ctx.signal)
+        const { drafts, blockedByRobots } = await crawlCareerPage(
+          ctx.http,
+          e.boardId,
+          e.name,
+          ctx.signal
+        )
         if (blockedByRobots) {
-          ctx.onEmployerSynced?.(e.id, 'error', 'robots.txt does not permit automated access to this page')
+          ctx.onEmployerSynced?.(
+            e.id,
+            'error',
+            'robots.txt does not permit automated access to this page'
+          )
           continue
         }
-        ctx.onEmployerSynced?.(e.id, drafts.length ? 'active' : 'pending', drafts.length ? null : 'No structured job postings found on this page', drafts.length)
+        ctx.onEmployerSynced?.(
+          e.id,
+          drafts.length ? 'active' : 'pending',
+          drafts.length ? null : 'No structured job postings found on this page',
+          drafts.length
+        )
         for (const d of drafts) {
           if (phrases.length && !matchesKeywords(d.title, phrases)) continue
           out.push({ sourceJobId: d.sourceJobId, payload: d })

@@ -2,8 +2,21 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { JobProvider } from '../src/main/services/jobs/providers/types'
 import { ALL_PROVIDERS } from '../src/main/services/jobs/providers'
 import type { Services } from '../src/main/app/services'
-import { adzunaPage, greenhouseJobs, leverPostings, remotiveBody, usajobsBody } from './fixtures/providerPayloads'
-import { fakeFetch, json, makeServices, warehouseBaristaProfile, frontendProfile, type Route } from './helpers'
+import {
+  adzunaPage,
+  greenhouseJobs,
+  leverPostings,
+  remotiveBody,
+  usajobsBody
+} from './fixtures/providerPayloads'
+import {
+  fakeFetch,
+  json,
+  makeServices,
+  warehouseBaristaProfile,
+  frontendProfile,
+  type Route
+} from './helpers'
 
 const routes = (calls: Record<string, number>): Route[] => [
   (u) => {
@@ -12,17 +25,28 @@ const routes = (calls: Record<string, number>): Route[] => [
     const page = Number(u.pathname.split('/').pop())
     return json(adzunaPage(page))
   },
-  (u) => (u.hostname === 'remotive.com' ? ((calls.remotive = (calls.remotive ?? 0) + 1), json(remotiveBody)) : undefined),
+  (u) =>
+    u.hostname === 'remotive.com'
+      ? ((calls.remotive = (calls.remotive ?? 0) + 1), json(remotiveBody))
+      : undefined,
   (u) => {
     if (u.hostname !== 'boards-api.greenhouse.io') return
     calls.greenhouse = (calls.greenhouse ?? 0) + 1
-    if (u.pathname === '/v1/boards/examplelogistics') return json({ name: 'Example Logistics', content: '' })
+    if (u.pathname === '/v1/boards/examplelogistics')
+      return json({ name: 'Example Logistics', content: '' })
     if (u.pathname.startsWith('/v1/boards/examplelogistics/jobs')) return json(greenhouseJobs)
     return json({ status: 404, error: 'Job not found' }, 404)
   },
-  (u) => (u.hostname === 'api.lever.co' && u.pathname.startsWith('/v0/postings/examplecoffee') ? json(leverPostings) : undefined),
-  (u) => (u.hostname === 'data.usajobs.gov' ? ((calls.usajobs = (calls.usajobs ?? 0) + 1), json(usajobsBody)) : undefined),
-  (u) => (u.hostname === 'remoteok.com' ? new Response('upstream error', { status: 500 }) : undefined)
+  (u) =>
+    u.hostname === 'api.lever.co' && u.pathname.startsWith('/v0/postings/examplecoffee')
+      ? json(leverPostings)
+      : undefined,
+  (u) =>
+    u.hostname === 'data.usajobs.gov'
+      ? ((calls.usajobs = (calls.usajobs ?? 0) + 1), json(usajobsBody))
+      : undefined,
+  (u) =>
+    u.hostname === 'remoteok.com' ? new Response('upstream error', { status: 500 }) : undefined
 ]
 
 let svc: Services | undefined
@@ -31,15 +55,28 @@ afterEach(async () => {
   svc = undefined
 })
 
-async function setup(extraProviders: JobProvider[] = [], calls: Record<string, number> = {}) {
-  const made = await makeServices({ fetchImpl: fakeFetch(routes(calls)), providers: [...ALL_PROVIDERS, ...extraProviders] })
+async function setup(
+  extraProviders: JobProvider[] = [],
+  calls: Record<string, number> = {}
+): Promise<{ svc: Services; dir: string; events: { channel: string; payload: unknown }[] }> {
+  const made = await makeServices({
+    fetchImpl: fakeFetch(routes(calls)),
+    providers: [...ALL_PROVIDERS, ...extraProviders]
+  })
   svc = made.svc
   svc.store.secrets.set('adzuna.appId', 'test-app')
   svc.store.secrets.set('adzuna.appKey', 'test-key-123456')
   svc.store.secrets.set('usajobs.apiKey', 'usajobs-key-123')
   svc.store.secrets.set('usajobs.email', 'tester@example.com')
   await svc.employers.addBoard({ provider: 'greenhouse', boardId: 'examplelogistics' })
-  svc.store.employers.upsert({ name: 'Example Coffee', atsProvider: 'lever', boardId: 'examplecoffee', locations: [], status: 'active', addedBy: 'user' })
+  svc.store.employers.upsert({
+    name: 'Example Coffee',
+    atsProvider: 'lever',
+    boardId: 'examplecoffee',
+    locations: [],
+    status: 'active',
+    addedBy: 'user'
+  })
   svc.store.candidate.save(warehouseBaristaProfile())
   return made
 }
@@ -48,7 +85,10 @@ describe('local warehouse search (Los Angeles, 20 mi)', () => {
   it('returns only relevant, in-radius jobs with traceable sources', async () => {
     const calls: Record<string, number> = {}
     await setup([], calls)
-    const res = await svc!.search.run({ query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20, radiusUnit: 'mi' }, { trigger: 'manual' })
+    const res = await svc!.search.run(
+      { query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20, radiusUnit: 'mi' },
+      { trigger: 'manual' }
+    )
     const titles = res.jobs.map((j) => `${j.title} @ ${j.company}`)
 
     expect(titles).toContain('Warehouse Associate @ Pacific Coast Logistics')
@@ -77,7 +117,10 @@ describe('local warehouse search (Los Angeles, 20 mi)', () => {
 
   it('discards provider-predicted salaries and shows only advertised pay', async () => {
     await setup()
-    const res = await svc!.search.run({ query: 'paralegal', location: 'Los Angeles, CA', radius: 20 }, { trigger: 'manual' })
+    const res = await svc!.search.run(
+      { query: 'paralegal', location: 'Los Angeles, CA', radius: 20 },
+      { trigger: 'manual' }
+    )
     const para = res.jobs.find((j) => j.title === 'Paralegal')!
     expect(para).toBeDefined()
     expect(para.salary).toBeUndefined()
@@ -86,8 +129,13 @@ describe('local warehouse search (Los Angeles, 20 mi)', () => {
 
   it('scores a warehouse candidate honestly (no floor, explanation present)', async () => {
     await setup()
-    const res = await svc!.search.run({ query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 }, { trigger: 'manual' })
-    const wa = res.jobs.find((j) => j.company === 'Example Logistics' && j.title === 'Warehouse Associate')!
+    const res = await svc!.search.run(
+      { query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 },
+      { trigger: 'manual' }
+    )
+    const wa = res.jobs.find(
+      (j) => j.company === 'Example Logistics' && j.title === 'Warehouse Associate'
+    )!
     expect(wa.match!.score).toBeGreaterThanOrEqual(70)
     expect(wa.match!.occupationRelevance).toBe('strong')
     expect(wa.match!.explanation.join('\n')).toMatch(/Occupation relevance: Strong/)
@@ -96,19 +144,31 @@ describe('local warehouse search (Los Angeles, 20 mi)', () => {
 
   it('keeps day and night shift requisitions separate', async () => {
     await setup()
-    const res = await svc!.search.run({ query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 }, { trigger: 'manual' })
+    const res = await svc!.search.run(
+      { query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 },
+      { trigger: 'manual' }
+    )
     const gh = res.jobs.filter((j) => j.company === 'Example Logistics')
-    expect(gh.map((j) => j.title).sort()).toEqual(['Warehouse Associate', 'Warehouse Associate - Night Shift'])
+    expect(gh.map((j) => j.title).sort()).toEqual([
+      'Warehouse Associate',
+      'Warehouse Associate - Night Shift'
+    ])
   })
 })
 
 describe('barista search', () => {
   it('finds the coffee job and not software jobs', async () => {
     await setup()
-    const res = await svc!.search.run({ query: 'Barista', location: 'Los Angeles, CA', radius: 15 }, { trigger: 'manual' })
+    const res = await svc!.search.run(
+      { query: 'Barista', location: 'Los Angeles, CA', radius: 15 },
+      { trigger: 'manual' }
+    )
     // Long Beach is ~20 miles from downtown LA: outside 15 mi.
     expect(res.jobs.find((j) => j.title === 'Barista')).toBeUndefined()
-    const wider = await svc!.search.run({ query: 'Barista', location: 'Lakewood, CA', radius: 15 }, { trigger: 'manual' })
+    const wider = await svc!.search.run(
+      { query: 'Barista', location: 'Lakewood, CA', radius: 15 },
+      { trigger: 'manual' }
+    )
     const b = wider.jobs.find((j) => j.title === 'Barista')!
     expect(b).toBeDefined()
     expect(b.salary).toMatchObject({ min: 19, max: 22, period: 'hour', currency: 'USD' })
@@ -121,7 +181,10 @@ describe('remote software search', () => {
   it('respects remote eligibility', async () => {
     await setup()
     svc!.store.candidate.save(frontendProfile())
-    const res = await svc!.search.run({ query: 'Junior Frontend Developer', location: 'United States', workModes: ['remote'] }, { trigger: 'manual' })
+    const res = await svc!.search.run(
+      { query: 'Junior Frontend Developer', location: 'United States', workModes: ['remote'] },
+      { trigger: 'manual' }
+    )
     const titles = res.jobs.map((j) => j.title)
     expect(titles).toContain('Junior Frontend Developer')
     // "Europe" only role is not eligible for a US candidate.
@@ -159,15 +222,31 @@ describe('fault tolerance', () => {
     ],
     normalize: (r) => {
       const p = r.payload as { title: string; url: string }
-      return { sourceJobId: r.sourceJobId, sourceUrl: p.url, title: p.title, company: 'X', locationText: 'Los Angeles, CA', employerDirect: false }
+      return {
+        sourceJobId: r.sourceJobId,
+        sourceUrl: p.url,
+        title: p.title,
+        company: 'X',
+        locationText: 'Los Angeles, CA',
+        employerDirect: false
+      }
     }
   }
 
   it('a failing provider does not stop the others; malformed records are rejected', async () => {
     await setup([thrower, malformed])
-    const res = await svc!.search.run({ query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 }, { trigger: 'manual' })
-    expect(res.stats.providers.find((p) => p.providerId === 'broken')).toMatchObject({ status: 'error', reason: 'boom' })
-    expect(res.stats.providers.find((p) => p.providerId === 'malformed')).toMatchObject({ rejected: 2, normalized: 0 })
+    const res = await svc!.search.run(
+      { query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 },
+      { trigger: 'manual' }
+    )
+    expect(res.stats.providers.find((p) => p.providerId === 'broken')).toMatchObject({
+      status: 'error',
+      reason: 'boom'
+    })
+    expect(res.stats.providers.find((p) => p.providerId === 'malformed')).toMatchObject({
+      rejected: 2,
+      normalized: 0
+    })
     expect(res.stats.rejectedMalformed).toBe(2)
     expect(res.jobs.length).toBeGreaterThan(0)
     expect(res.jobs.some((j) => j.source === 'malformed')).toBe(false)
@@ -176,8 +255,14 @@ describe('fault tolerance', () => {
   it('missing credentials produce an actionable skipped state', async () => {
     await setup()
     svc!.store.secrets.delete('adzuna.appKey')
-    const res = await svc!.search.run({ query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 }, { trigger: 'manual' })
-    expect(res.stats.providers.find((p) => p.providerId === 'adzuna')).toMatchObject({ status: 'skipped', reason: expect.stringContaining('Requires credentials') })
+    const res = await svc!.search.run(
+      { query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 },
+      { trigger: 'manual' }
+    )
+    expect(res.stats.providers.find((p) => p.providerId === 'adzuna')).toMatchObject({
+      status: 'skipped',
+      reason: expect.stringContaining('Requires credentials')
+    })
     const info = svc!.search.providerInfos().find((p) => p.id === 'adzuna')!
     expect(info.status).toBe('REQUIRES_CREDENTIALS')
     expect(info.statusDetail).toMatch(/Application key/)
@@ -186,25 +271,44 @@ describe('fault tolerance', () => {
 
   it('rate limits are recorded and the provider is paused', async () => {
     const made = await makeServices({
-      fetchImpl: fakeFetch([(u) => (u.hostname === 'api.adzuna.com' ? json({ error: 'quota' }, 429, { 'retry-after': '3600' }) : undefined)])
+      fetchImpl: fakeFetch([
+        (u) =>
+          u.hostname === 'api.adzuna.com'
+            ? json({ error: 'quota' }, 429, { 'retry-after': '3600' })
+            : undefined
+      ])
     })
     svc = made.svc
     svc.store.secrets.set('adzuna.appId', 'a')
     svc.store.secrets.set('adzuna.appKey', 'bbbbbbbb')
-    const res = await svc.search.run({ query: 'cashier', location: 'Los Angeles, CA' }, { trigger: 'manual' })
+    const res = await svc.search.run(
+      { query: 'cashier', location: 'Los Angeles, CA' },
+      { trigger: 'manual' }
+    )
     expect(res.stats.providers.find((p) => p.providerId === 'adzuna')!.status).toBe('error')
     const info = svc.search.providerInfos().find((p) => p.id === 'adzuna')!
     expect(info.status).toBe('LIMITED')
-    const again = await svc.search.run({ query: 'cashier', location: 'Los Angeles, CA' }, { trigger: 'manual' })
-    expect(again.stats.providers.find((p) => p.providerId === 'adzuna')!.reason).toMatch(/Rate-limited/)
+    const again = await svc.search.run(
+      { query: 'cashier', location: 'Los Angeles, CA' },
+      { trigger: 'manual' }
+    )
+    expect(again.stats.providers.find((p) => p.providerId === 'adzuna')!.reason).toMatch(
+      /Rate-limited/
+    )
   })
 
   it('caches provider responses and reuses stable job ids', async () => {
     const calls: Record<string, number> = {}
     await setup([], calls)
-    const a = await svc!.search.run({ query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 }, { trigger: 'manual' })
+    const a = await svc!.search.run(
+      { query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 },
+      { trigger: 'manual' }
+    )
     const before = calls.adzuna
-    const b = await svc!.search.run({ query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 }, { trigger: 'manual' })
+    const b = await svc!.search.run(
+      { query: 'Warehouse Associate', location: 'Los Angeles, CA', radius: 20 },
+      { trigger: 'manual' }
+    )
     expect(calls.adzuna).toBe(before)
     expect(b.stats.providers.find((p) => p.providerId === 'adzuna')!.status).toBe('cached')
     expect(b.jobs.map((j) => j.id).sort()).toEqual(a.jobs.map((j) => j.id).sort())
@@ -215,11 +319,17 @@ describe('fault tolerance', () => {
     const slow: JobProvider = {
       ...thrower,
       id: 'slow',
-      fetch: (_q, ctx) => new Promise((_r, rej) => ctx.signal.addEventListener('abort', () => rej(new Error('aborted'))))
+      fetch: (_q, ctx) =>
+        new Promise((_r, rej) =>
+          ctx.signal.addEventListener('abort', () => rej(new Error('aborted')))
+        )
     }
     await setup([slow])
     const events: string[] = []
-    const p = svc!.search.run({ query: 'Warehouse Associate', location: 'Los Angeles, CA' }, { trigger: 'manual', onProgress: (e) => events.push(e.runId) })
+    const p = svc!.search.run(
+      { query: 'Warehouse Associate', location: 'Los Angeles, CA' },
+      { trigger: 'manual', onProgress: (e) => events.push(e.runId) }
+    )
     await new Promise((r) => setTimeout(r, 300))
     expect(svc!.search.cancel(events[0])).toBe(true)
     const res = await p

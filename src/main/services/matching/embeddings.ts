@@ -30,20 +30,44 @@ export class EmbeddingService {
   async checkStatus(force = false): Promise<SemanticStatus> {
     const c = this.config()
     if (!c.enabled) {
-      this.status = { enabled: false, active: false, model: c.model, detail: 'Disabled in settings' }
+      this.status = {
+        enabled: false,
+        active: false,
+        model: c.model,
+        detail: 'Disabled in settings'
+      }
       return this.status
     }
     if (!force && Date.now() - this.lastCheck < 60_000) return this.status
     this.lastCheck = Date.now()
     try {
-      const tags = await this.http.json<{ models?: { name: string }[] }>({ url: `${this.base()}/api/tags`, timeoutMs: 2500, retries: 0 })
+      const tags = await this.http.json<{ models?: { name: string }[] }>({
+        url: `${this.base()}/api/tags`,
+        timeoutMs: 2500,
+        retries: 0
+      })
       const names = (tags.models ?? []).map((m) => m.name)
       const present = names.some((n) => n === c.model || n.startsWith(`${c.model}:`))
       this.status = present
-        ? { enabled: true, active: true, model: c.model, detail: `Ollama running; using ${c.model}` }
-        : { enabled: true, active: false, model: c.model, detail: `Ollama is running but "${c.model}" is not installed. Run: ollama pull ${c.model}` }
+        ? {
+            enabled: true,
+            active: true,
+            model: c.model,
+            detail: `Ollama running; using ${c.model}`
+          }
+        : {
+            enabled: true,
+            active: false,
+            model: c.model,
+            detail: `Ollama is running but "${c.model}" is not installed. Run: ollama pull ${c.model}`
+          }
     } catch {
-      this.status = { enabled: true, active: false, model: c.model, detail: `Ollama not reachable at ${this.base()} — using deterministic matching only` }
+      this.status = {
+        enabled: true,
+        active: false,
+        model: c.model,
+        detail: `Ollama not reachable at ${this.base()} — using deterministic matching only`
+      }
     }
     return this.status
   }
@@ -57,7 +81,10 @@ export class EmbeddingService {
   }
 
   private cached(hash: string, model: string): number[] | undefined {
-    const row = this.db.get<{ vector: string }>('SELECT vector FROM job_embeddings WHERE content_hash = ? AND model = ?', [hash, model])
+    const row = this.db.get<{ vector: string }>(
+      'SELECT vector FROM job_embeddings WHERE content_hash = ? AND model = ?',
+      [hash, model]
+    )
     if (!row) return undefined
     try {
       return JSON.parse(row.vector)
@@ -98,17 +125,24 @@ export class EmbeddingService {
             const v = vecs[k]
             if (!Array.isArray(v) || v.length === 0) return
             out[b.idx] = v
-            this.db.run('INSERT OR REPLACE INTO job_embeddings (content_hash, model, vector, created_at) VALUES (?, ?, ?, ?)', [
-              b.hash,
-              model,
-              JSON.stringify(v.map((x) => Math.round(x * 1e5) / 1e5)),
-              new Date().toISOString()
-            ])
+            this.db.run(
+              'INSERT OR REPLACE INTO job_embeddings (content_hash, model, vector, created_at) VALUES (?, ?, ?, ?)',
+              [
+                b.hash,
+                model,
+                JSON.stringify(v.map((x) => Math.round(x * 1e5) / 1e5)),
+                new Date().toISOString()
+              ]
+            )
           })
         })
       } catch (err) {
         log.warn('embeddings', `Ollama embedding failed: ${(err as Error).message}`)
-        this.status = { ...this.status, active: false, detail: `Embedding request failed: ${(err as Error).message}` }
+        this.status = {
+          ...this.status,
+          active: false,
+          detail: `Embedding request failed: ${(err as Error).message}`
+        }
         break
       }
     }

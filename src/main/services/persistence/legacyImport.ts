@@ -1,7 +1,12 @@
 import fs from 'fs'
 import path from 'path'
 import { createHash, randomUUID } from 'crypto'
-import type { CandidateProfile, MigrationReport, NormalizedJob, ResumeRecord } from '../../../shared/types'
+import type {
+  CandidateProfile,
+  MigrationReport,
+  NormalizedJob,
+  ResumeRecord
+} from '../../../shared/types'
 import type { Store } from './store'
 import { emptyProfile } from './candidateRepo'
 import { log } from '../logger'
@@ -74,7 +79,10 @@ function sha256(buf: Buffer | string): string {
  *  - Jobs marked "applied" become SUBMISSION_UNVERIFIED applications, because the
  *    old flow recorded approval, not an observed submission.
  */
-export function importLegacyDatabase(store: Store, userDataDir: string): MigrationReport | undefined {
+export function importLegacyDatabase(
+  store: Store,
+  userDataDir: string
+): MigrationReport | undefined {
   const existing = store.settings.getRaw<MigrationReport | null>(IMPORT_KEY, null)
   if (existing?.performed) return existing
 
@@ -89,7 +97,10 @@ export function importLegacyDatabase(store: Store, userDataDir: string): Migrati
   }
 
   const raw = fs.readFileSync(legacyPath)
-  const backupPath = path.join(userDataDir, `pulseapply_db.backup-${report.at.replace(/[:.]/g, '-')}.json`)
+  const backupPath = path.join(
+    userDataDir,
+    `pulseapply_db.backup-${report.at.replace(/[:.]/g, '-')}.json`
+  )
   fs.copyFileSync(legacyPath, backupPath)
   if (sha256(fs.readFileSync(backupPath)) !== sha256(raw)) {
     throw new Error('Legacy database backup verification failed; import aborted')
@@ -98,9 +109,11 @@ export function importLegacyDatabase(store: Store, userDataDir: string): Migrati
 
   let legacy: LegacyDb
   try {
-    legacy = JSON.parse(raw.toString('utf-8').replace(/^﻿/, ''))
+    legacy = JSON.parse(raw.toString('utf-8').replace(/^\uFEFF/, ''))
   } catch (err) {
-    report.notes.push(`Legacy database could not be parsed (${(err as Error).message}); nothing imported. Backup kept.`)
+    report.notes.push(
+      `Legacy database could not be parsed (${(err as Error).message}); nothing imported. Backup kept.`
+    )
     report.performed = true
     store.settings.setRaw(IMPORT_KEY, report)
     return report
@@ -110,8 +123,17 @@ export function importLegacyDatabase(store: Store, userDataDir: string): Migrati
     // ---- candidate -------------------------------------------------------
     const c = legacy.candidate
     if (c && (c.fullName || c.email || c.phone)) {
-      const profile: CandidateProfile = store.candidate.exists() ? store.candidate.get() : emptyProfile()
-      const field = (v?: string) => ({ value: v ?? '', confidence: v ? 0.5 : 0, source: 'user' as const, confirmed: false })
+      const profile: CandidateProfile = store.candidate.exists()
+        ? store.candidate.get()
+        : emptyProfile()
+      const field = (
+        v?: string
+      ): { value: string; confidence: number; source: 'user'; confirmed: boolean } => ({
+        value: v ?? '',
+        confidence: v ? 0.5 : 0,
+        source: 'user' as const,
+        confirmed: false
+      })
       if (!profile.fullName.value) profile.fullName = field(c.fullName)
       if (!profile.email.value) profile.email = field(c.email)
       if (!profile.phone.value) profile.phone = field(c.phone)
@@ -126,11 +148,17 @@ export function importLegacyDatabase(store: Store, userDataDir: string): Migrati
         profile.preferences.location = legacy.settings.targetLocation
       }
       if (legacy.profile?.extractedSkills?.length && profile.skills.length === 0) {
-        profile.skills = legacy.profile.extractedSkills.map((name) => ({ name, source: 'resume' as const, confirmed: false }))
+        profile.skills = legacy.profile.extractedSkills.map((name) => ({
+          name,
+          source: 'resume' as const,
+          confirmed: false
+        }))
       }
       store.candidate.save(profile)
       report.imported.candidate = true
-      report.notes.push('Contact details imported as UNCONFIRMED — please review them on the Profile page.')
+      report.notes.push(
+        'Contact details imported as UNCONFIRMED — please review them on the Profile page.'
+      )
       if (c.workAuthorization) {
         report.notes.push(
           `Legacy work authorization value "${c.workAuthorization}" was a form default and was not imported. Set it explicitly if you want autofill to use it.`
@@ -143,7 +171,8 @@ export function importLegacyDatabase(store: Store, userDataDir: string): Migrati
     if (p?.rawText) {
       const sha = sha256(p.rawText)
       if (!store.candidate.findResumeBySha(sha)) {
-        const filePath = c?.resumeFilePath && fs.existsSync(c.resumeFilePath) ? c.resumeFilePath : ''
+        const filePath =
+          c?.resumeFilePath && fs.existsSync(c.resumeFilePath) ? c.resumeFilePath : ''
         const rec: ResumeRecord = {
           id: randomUUID(),
           label: `${p.fileName ?? 'Resume'} (imported)`,
@@ -155,7 +184,9 @@ export function importLegacyDatabase(store: Store, userDataDir: string): Migrati
           needsOcr: false,
           isDefault: true,
           parsedAt: p.updatedAt ?? report.at,
-          warnings: filePath ? [] : ['Original resume file not found; re-upload it to attach it to applications.']
+          warnings: filePath
+            ? []
+            : ['Original resume file not found; re-upload it to attach it to applications.']
         }
         store.candidate.addResume(rec, p.rawText)
       }
@@ -207,7 +238,16 @@ export function importLegacyDatabase(store: Store, userDataDir: string): Migrati
       const inserted = store.db.run(
         `INSERT OR IGNORE INTO jobs (id, canonical_key, data, title, company, source, discovered_at, last_seen_at,
            verification_status, dismissed, legacy) VALUES (?, ?, ?, ?, ?, 'legacy', ?, ?, 'UNVERIFIED', ?, 1)`,
-        [id, id, JSON.stringify(data), j.title, j.company ?? '', now, now, j.status === 'dismissed' ? 1 : 0]
+        [
+          id,
+          id,
+          JSON.stringify(data),
+          j.title,
+          j.company ?? '',
+          now,
+          now,
+          j.status === 'dismissed' ? 1 : 0
+        ]
       )
       if (inserted) report.imported.jobs++
       if (j.status === 'applied' || j.status === 'in_progress' || j.status === 'awaiting_review') {
@@ -219,7 +259,8 @@ export function importLegacyDatabase(store: Store, userDataDir: string): Migrati
             ? [
                 {
                   kind: 'user_report',
-                  detail: 'Marked "applied" in the previous version, which recorded approval only — no submission confirmation was observed.',
+                  detail:
+                    'Marked "applied" in the previous version, which recorded approval only — no submission confirmation was observed.',
                   observedAt: now
                 }
               ]
