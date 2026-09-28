@@ -138,6 +138,9 @@ export class ApplicationManager {
       const session = await this.deps.browser.open(id, () => this.onBrowserClosed(id))
       const page = session.page
       if (app.isDemo) {
+        // Practice form: only for jobs created by Demo mode, and only while it is on.
+        if (!job?.isDemo || !this.store.settings.get().demoMode)
+          throw new ApplicationError('Demo practice forms are only available in demo mode')
         await page.setContent(
           demoFormHtml(job?.title ?? 'Demo job', job?.company ?? 'Demo employer')
         )

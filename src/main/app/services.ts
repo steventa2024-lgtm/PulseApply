@@ -212,6 +212,9 @@ export const ENV_SECRETS: Record<string, string> = {
   JOOBLE_REGIONAL_KEYS: 'jooble.regionalKeys',
   USAJOBS_API_KEY: 'usajobs.apiKey',
   USAJOBS_EMAIL: 'usajobs.email',
+  CAREERONESTOP_USER_ID: 'careeronestop.userId',
+  CAREERONESTOP_TOKEN: 'careeronestop.token',
+  THEMUSE_API_KEY: 'themuse.apiKey',
   BRAVE_SEARCH_API_KEY: 'brave.apiKey',
   TELEGRAM_BOT_TOKEN: 'telegram.botToken'
 }

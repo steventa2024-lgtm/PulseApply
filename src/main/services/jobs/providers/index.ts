@@ -9,6 +9,7 @@ import {
 import { adzunaProvider, joobleProvider, usajobsProvider } from './aggregators'
 import { ashbyProvider, greenhouseProvider, leverProvider, smartRecruitersProvider } from './ats'
 import { careerPagesProvider } from './careerPages'
+import { careerOneStopProvider, theMuseProvider } from './localBoards'
 import {
   glassdoorProvider,
   indeedProvider,
@@ -44,6 +45,8 @@ export const ALL_PROVIDERS: JobProvider[] = [
   adzunaProvider,
   joobleProvider,
   usajobsProvider,
+  careerOneStopProvider,
+  theMuseProvider,
   greenhouseProvider,
   leverProvider,
   ashbyProvider,
