@@ -1,7 +1,7 @@
 {
   "name": "pulseapply",
   "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "description": "Resume-driven job discovery and human-approved application assistant (Electron + React + TypeScript)",
   "main": "./out/main/index.js",
   "author": "example.com",
   "homepage": "https://electron-vite.org",
@@ -11,6 +11,9 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:gazetteer": "node scripts/build-gazetteer.mjs",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",

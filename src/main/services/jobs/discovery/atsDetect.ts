@@ -8,6 +8,8 @@ export interface AtsRef {
 }
 
 const BOARD_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/
+/** Ashby job-board names may contain spaces (URL-encoded in links). */
+const ASHBY_BOARD_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/
 
 /**
  * Recognises public ATS job-board and posting URLs:
@@ -33,15 +35,12 @@ export function detectAtsFromUrl(value: string | undefined): AtsRef | undefined 
     const jobIdx = seg.indexOf('jobs')
     return { provider: 'greenhouse', board: seg[0], postingId: jobIdx >= 0 && /^\d+$/.test(seg[jobIdx + 1] ?? '') ? seg[jobIdx + 1] : undefined }
   }
-  if (/greenhouse\.io$/.test(host) && url.searchParams.get('gh_jid')) {
-    return undefined
-  }
   if (host === 'jobs.lever.co' || host === 'jobs.eu.lever.co') {
     if (!seg[0] || !BOARD_RE.test(seg[0])) return undefined
     return { provider: 'lever', board: seg[0], postingId: /^[0-9a-f-]{36}$/i.test(seg[1] ?? '') ? seg[1] : undefined }
   }
   if (host === 'jobs.ashbyhq.com') {
-    if (!seg[0] || !BOARD_RE.test(decodeURIComponent(seg[0]))) return undefined
+    if (!seg[0] || !ASHBY_BOARD_RE.test(decodeURIComponent(seg[0]))) return undefined
     return { provider: 'ashby', board: decodeURIComponent(seg[0]), postingId: /^[0-9a-f-]{36}$/i.test(seg[1] ?? '') ? seg[1] : undefined }
   }
   if (host === 'jobs.smartrecruiters.com' || host === 'careers.smartrecruiters.com') {

@@ -94,7 +94,13 @@ const MANUAL_PLATFORMS: [RegExp, string][] = [
 ]
 
 export function manualReason(url: string): string | undefined {
-  for (const [re, reason] of MANUAL_PLATFORMS) if (re.test(url)) return reason
+  let host: string
+  try {
+    host = new URL(url).hostname
+  } catch {
+    return undefined
+  }
+  for (const [re, reason] of MANUAL_PLATFORMS) if (re.test(host)) return reason
   return undefined
 }
 

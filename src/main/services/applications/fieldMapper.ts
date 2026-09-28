@@ -40,8 +40,8 @@ const SENSITIVE: [RegExp, SensitiveCategory][] = [
   [/salary|compensation|pay expectation|desired pay|expected pay|hourly rate expectation/i, 'salary'],
   [/start date|available to start|availability|notice period|when can you start|shifts? (are you )?available|hours available/i, 'availability'],
   [/years of (professional |relevant |work )?experience|how many years|how long have you/i, 'experience_years'],
-  [/do you (have|hold|possess)|certif|licen[cs]e|forklift|cdl|food handler|servsafe|cpr|degree/i, 'certification'],
-  [/i (agree|acknowledge|certify|confirm|consent|understand|attest)|terms|privacy (policy|notice)|consent|declar|attest|truthful|accurate and complete|gdpr/i, 'declaration']
+  [/i (agree|acknowledge|certify|confirm|consent|understand|attest)|terms|privacy (policy|notice)|consent|declar|attest|truthful|accurate and complete|gdpr/i, 'declaration'],
+  [/do you (have|hold|possess)|certificat|certified|licen[cs]e|forklift|cdl|food handler|servsafe|cpr|degree/i, 'certification']
 ]
 
 export function sensitiveCategory(label: string): SensitiveCategory | undefined {

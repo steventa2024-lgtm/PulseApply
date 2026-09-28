@@ -34,6 +34,7 @@ export interface ServiceOptions {
   browserOptions?: () => BrowserOptions
   telegramApiFactory?: (token: string) => TelegramApi
   telegramPollTimeoutSec?: number
+  telegramConflictBackoffMs?: number
   allowPrivateHosts?: boolean
   /** In-memory database (tests). */
   inMemory?: boolean
@@ -92,7 +93,8 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
     queueApplication: (jobId) => applications.queue(jobId, 'telegram'),
     emit: (s: TelegramStatus) => opts.emit('telegram:status', s),
     apiFactory: opts.telegramApiFactory,
-    pollTimeoutSec: opts.telegramPollTimeoutSec
+    pollTimeoutSec: opts.telegramPollTimeoutSec,
+    conflictBackoffMs: opts.telegramConflictBackoffMs
   })
   const scheduler = new Scheduler({ store, search, telegram, onUpdate: () => opts.emit('scheduler:updated', null) })
 

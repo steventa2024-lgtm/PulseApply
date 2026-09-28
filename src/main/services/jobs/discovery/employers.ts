@@ -41,7 +41,7 @@ export class EmployerService {
 
   async addBoard(input: { provider: Exclude<AtsProvider, 'jsonld'>; boardId: string; name?: string; country?: string; careersUrl?: string; addedBy?: 'user' | 'discovery' }, signal?: AbortSignal): Promise<EmployerRecord> {
     const boardId = input.boardId.trim()
-    if (!/^[A-Za-z0-9][A-Za-z0-9._%-]{0,99}$/.test(boardId)) throw new EmployerError('That board identifier is not valid')
+    if (!/^[A-Za-z0-9][A-Za-z0-9 ._%-]{0,99}$/.test(boardId) || (input.provider !== 'ashby' && boardId.includes(' '))) throw new EmployerError('That board identifier is not valid')
     const v = await validateBoard(this.http, input.provider, boardId, signal)
     if (!v.ok) throw new EmployerError(v.error ?? 'Could not validate that job board')
     return this.store.employers.upsert({

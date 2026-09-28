@@ -348,8 +348,12 @@ function escapeRe(s: string): string {
 /** Aliases that are too short/ambiguous for free text unless they appear in a skills list. */
 const AMBIGUOUS_ALIASES = new Set(['js', 'ts', 'go', 'node', 'rest', 'lean', 'mig', 'tig', 'nec', 'bol', 'pos', 'register', 'till', 'displays', 'shipping', 'receiving', 'packing', 'loading', 'cleaning', 'accuracy', 'responsive', 'spring', 'express', 'sap', 'erp', 'cma', 'rma', 'bls', 'cdl', 'cpr', 'cpa', 'pmp', 'phi', 'dns', 'lan', 'wan', 'ece', 'a/p', 'a/r', 'apis', 'hardware', 'metrics', 'kpi', 'kpis', 'eld', 'tips certified', 'dolly', 'dart', 'sketch', 'lever', 'greenhouse', 'sentinel', 'imaging', 'booking', 'bookings', 'orientation', 'instruction', 'grading', 'assessments', 'drain', 'pipes', 'fixtures', 'heating', 'wiring', 'circuits', 'documentation', 'dashboards', 'dashboard', 'regression', 'retention', 'renewals', 'outbound', 'displays', 'navigation', 'gps', 'grill', 'vitals', 'epic', 'mobx', 'less', 'aria', 'vue', 'sre'])
 
+/** Uppercase forms that are too ambiguous even as acronyms. */
+const UPPERCASE_UNSAFE = new Set(['go', 'ts', 'less', 'till', 'dart', 'node', 'dns', 'lan', 'wan', 'phi'])
+
 interface CompiledAlias {
   id: string
+  alias: string
   re: RegExp
   ambiguous: boolean
 }
@@ -361,7 +365,7 @@ function compile(defs: { id: string; aliases: string[] }[]): CompiledAlias[] {
       const alias = a.toLowerCase()
       // "collaborat" is a deliberate stem; everything else is a whole phrase.
       const tail = alias === 'collaborat' ? '' : '(?![a-z0-9+#])'
-      out.push({ id: d.id, re: new RegExp(`(?<![a-z0-9])${escapeRe(alias)}${tail}`, 'i'), ambiguous: AMBIGUOUS_ALIASES.has(alias) })
+      out.push({ id: d.id, alias, re: new RegExp(`(?<![a-z0-9])${escapeRe(alias)}${tail}`, 'i'), ambiguous: AMBIGUOUS_ALIASES.has(alias) })
     }
   }
   return out
@@ -381,7 +385,11 @@ export function findSkills(text: string, opts: { strict?: boolean } = {}): strin
   const lower = text.toLowerCase()
   for (const a of SKILL_ALIASES) {
     if (found.has(a.id)) continue
-    if (strict && a.ambiguous) continue
+    if (strict && a.ambiguous) {
+      // Short acronyms ("POS", "SAP", "REST", "MIG") count when written in uppercase in the source.
+      if (/^[a-z]{2,4}$/.test(a.alias) && !UPPERCASE_UNSAFE.has(a.alias) && new RegExp(`(?<![A-Za-z0-9])${a.alias.toUpperCase()}(?![A-Za-z0-9])`).test(text)) found.add(a.id)
+      continue
+    }
     if (a.re.test(lower)) found.add(a.id)
   }
   // Context-dependent short aliases that are safe with a qualifier nearby.
@@ -405,9 +413,8 @@ export function findCertifications(text: string, opts: { strict?: boolean } = {}
   for (const a of CERT_ALIASES) {
     if (found.has(a.id)) continue
     if (strict && a.ambiguous) {
-      // Short credential acronyms count when written in uppercase in the source.
-      const acronym = a.re.source.match(/[a-z]+/)?.[0]
-      if (acronym && new RegExp(`\\b${acronym.toUpperCase()}\\b`).test(text)) found.add(a.id)
+      // Short credential acronyms ("CDL", "BLS", "CPR") count when written in uppercase in the source.
+      if (/^[a-z]{2,4}$/.test(a.alias) && new RegExp(`(?<![A-Za-z0-9])${a.alias.toUpperCase()}(?![A-Za-z0-9])`).test(text)) found.add(a.id)
       continue
     }
     if (a.re.test(lower)) found.add(a.id)

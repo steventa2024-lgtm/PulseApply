@@ -20,6 +20,8 @@ export interface TelegramDeps {
   emit: (status: TelegramStatus) => void
   apiFactory?: (token: string) => TelegramApi
   pollTimeoutSec?: number
+  /** Base delay for 409 conflict backoff (doubles per attempt, max 30s). */
+  conflictBackoffMs?: number
 }
 
 /**
@@ -240,7 +242,7 @@ export class TelegramService {
             return
           }
           this.setState('RUNNING', `Waiting for a previous Telegram session to expire (409, attempt ${this.conflictCount}/${MAX_CONFLICTS})…`)
-          await this.sleep(Math.min(30_000, 2000 * 2 ** (this.conflictCount - 1)), signal)
+          await this.sleep(Math.min(30_000, (this.deps.conflictBackoffMs ?? 2000) * 2 ** (this.conflictCount - 1)), signal)
           continue
         }
         if (e.status === 401 || e.status === 404) {
