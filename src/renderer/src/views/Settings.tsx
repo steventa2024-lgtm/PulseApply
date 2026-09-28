@@ -97,6 +97,21 @@ export default function Settings({
                   onChange={(e) => setS({ ...s, ollama: { ...s.ollama, model: e.target.value } })}
                 />
               </div>
+              <div className="col-span-2">
+                <Label hint="(optional — Resume Helper wording suggestions, e.g. llama3.2)">
+                  Text model
+                </Label>
+                <Input
+                  value={s.ollama.generateModel ?? ''}
+                  placeholder="leave empty to use rule-based suggestions only"
+                  onChange={(e) =>
+                    setS({
+                      ...s,
+                      ollama: { ...s.ollama, generateModel: e.target.value.trim() || undefined }
+                    })
+                  }
+                />
+              </div>
             </div>
             <p className="text-[11px] text-slate-500">
               Install: ollama.com, then run{' '}
