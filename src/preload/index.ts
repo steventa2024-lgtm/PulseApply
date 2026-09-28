@@ -1,43 +1,36 @@
-﻿import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { EVENT_CHANNELS, INVOKE_CHANNELS, type IpcEnvelope } from '../shared/ipc'
 
-const api = {
-  ping: () => ipcRenderer.invoke('system:ping'),
-  getDatabase: () => ipcRenderer.invoke('db:get-all'),
-  saveCandidate: (candidate: any) => ipcRenderer.invoke('db:save-candidate', candidate),
-  selectAndParseResume: () => ipcRenderer.invoke('resume:select-and-parse'),
-  parseResumePath: (filePath: string) => ipcRenderer.invoke('resume:parse-path', filePath),
-  parseResumeBase64: (fileName: string, base64: string) =>
-    ipcRenderer.invoke('resume:parse-base64', { fileName, base64 }),
-  getPathForFile: (file: File) => {
+/**
+ * Minimal, allow-listed bridge. The renderer can only invoke known channels
+ * (each validated again in the main process) and subscribe to known events.
+ * Subscriptions return an unsubscribe function so React effects can clean up
+ * (the previous bridge leaked a listener on every re-render/HMR).
+ */
+const invokeAllowed = new Set<string>(INVOKE_CHANNELS)
+const eventsAllowed = new Set<string>(EVENT_CHANNELS)
+
+const bridge = {
+  invoke(channel: string, payload?: unknown): Promise<IpcEnvelope<unknown>> {
+    if (!invokeAllowed.has(channel)) return Promise.resolve({ ok: false, error: `Channel not allowed: ${channel}` })
+    return ipcRenderer.invoke(channel, payload)
+  },
+  on(channel: string, callback: (payload: unknown) => void): () => void {
+    if (!eventsAllowed.has(channel)) return () => undefined
+    const listener = (_: Electron.IpcRendererEvent, payload: unknown) => callback(payload)
+    ipcRenderer.on(channel, listener)
+    return () => ipcRenderer.removeListener(channel, listener)
+  },
+  /** Absolute path for a dropped file (Electron >= 32 replacement for File.path). */
+  pathForFile(file: File): string {
     try {
       return webUtils.getPathForFile(file)
     } catch {
-      return (file as any).path || ''
+      return ''
     }
-  },
-  forceRunScraper: () => ipcRenderer.invoke('scraper:force-run'),
-  toggleScheduler: (activate: boolean) => ipcRenderer.invoke('scheduler:toggle', activate),
-  onPipelineUpdated: (callback: (jobs: any) => void) => {
-    ipcRenderer.on('jobs:pipeline-updated', (_, data) => callback(data))
-  },
-  onDatabaseSync: (callback: (db: any) => void) => {
-    ipcRenderer.on('db:sync', (_, data) => callback(data))
-  },
-  startAutofill: (jobId: string) => ipcRenderer.invoke('autofill:start', jobId),
-  confirmSubmission: (jobId: string) => ipcRenderer.invoke('autofill:confirm-submission', jobId),
-  cancelAutofill: () => ipcRenderer.invoke('autofill:cancel'),
-  onAutofillStatus: (callback: (update: any) => void) => {
-    ipcRenderer.on('autofill:status-update', (_, data) => callback(data))
   }
 }
 
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
-  }
-} else {
-  // @ts-ignore
-  window.api = api
-}
+export type PulseBridge = typeof bridge
+
+contextBridge.exposeInMainWorld('pulse', bridge)
