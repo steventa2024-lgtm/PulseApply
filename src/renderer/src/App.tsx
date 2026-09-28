@@ -39,7 +39,7 @@ const NAV: { id: View; label: string; icon: typeof Layers }[] = [
 ]
 
 function Shell(): React.JSX.Element {
-  const { view, go, lastSearch, setLastSearch, toasts, dismissToast } = useApp()
+  const { view, go, setLastSearch, toasts, dismissToast, counters, refreshCounters } = useApp()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [info, setInfo] = useState<AppInfo | null>(null)
 
@@ -62,13 +62,15 @@ function Shell(): React.JSX.Element {
   }, [])
   useEvent('applications:updated', refreshStats)
   useEvent('jobs:changed', refreshStats)
-  useEvent('scheduler:updated', refreshStats)
+  useEvent('scheduler:updated', () => {
+    refreshStats()
+    refreshCounters()
+  })
   useEvent('telegram:status', refreshStats)
 
   // Sidebar badges use the same data the pages render (no separate counters that can drift).
-  const resultsCount = lastSearch ? lastSearch.jobs.filter((j) => !j.state.dismissed).length : 0
   const badges: Partial<Record<View, number>> = {
-    results: resultsCount,
+    results: counters?.eligible ?? 0,
     applications: stats?.applicationsInProgress ?? 0
   }
 

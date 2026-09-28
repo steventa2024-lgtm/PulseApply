@@ -76,17 +76,24 @@ export default function Dashboard({
         </Card>
       )}
 
+      {stats?.counters && (
+        <p className="mb-3 text-[11px] text-slate-400" data-testid="dashboard-criteria">
+          All numbers use your active criteria:{' '}
+          <span className="text-slate-200">{stats.counters.criteriaLabel}</span> ·{' '}
+          {stats.counters.review} need location review · {stats.counters.excluded} excluded
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat
-          label="Jobs in index"
+          label="Eligible jobs"
           value={stats?.totalJobs ?? '…'}
-          hint="Not dismissed"
+          hint={`Meet your criteria · ${stats?.counters.historical ?? '…'} stored in total`}
           onClick={() => go('results')}
         />
         <Stat
-          label="New (24 h)"
+          label="New eligible (24 h)"
           value={stats?.newJobs ?? '…'}
-          hint="First discovered in the last day"
+          hint="Meet your criteria, first seen in the last day"
         />
         <Stat
           label="Verified"

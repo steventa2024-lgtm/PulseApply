@@ -39,6 +39,16 @@ export interface MatchContext {
   /** 0..1 cosine-derived similarity when local embeddings are active. */
   semantic?: { similarity: number; model: string }
   weights?: Record<string, number>
+  /**
+   * Criteria already enforced as hard filters. A filter that every shown job
+   * passes carries no information, so it is left out of the weighted score
+   * instead of adding the same points to every job.
+   */
+  filters?: { location?: string; workMode?: boolean; employmentType?: boolean; salary?: boolean }
+  /** Overrides the profile's preferences with the active search criteria. */
+  preferences?: Partial<CandidateModel['preferences']>
+  /** Terms the user wants to see; scored by presence in the posting. */
+  preferredSkills?: string[]
 }
 
 function monthsLabel(m: number): string {
@@ -217,15 +227,20 @@ export function scoreMatch(
   }
 
   // --- 7. location ----------------------------------------------------------
-  if (ctx.geo) {
+  if (ctx.filters?.location) {
+    add('location', null, `Applied as a filter: ${ctx.filters.location}`)
+  } else if (ctx.geo) {
     add('location', GEO_SCORE[ctx.geo.eligibility] ?? 0.4, ctx.geo.note ?? ctx.geo.eligibility)
   } else {
     add('location', null, 'No search location to compare')
   }
 
   // --- 8. work mode ---------------------------------------------------------
-  const prefModes = cand.preferences.workModes
-  if (prefModes.length) {
+  const pref = { ...cand.preferences, ...(ctx.preferences ?? {}) }
+  const prefModes = pref.workModes ?? []
+  if (ctx.filters?.workMode) {
+    add('workMode', null, 'Applied as a filter')
+  } else if (prefModes.length) {
     const ok = job.workModes.some((m) => prefModes.includes(m))
     add(
       'workMode',
@@ -237,8 +252,13 @@ export function scoreMatch(
   } else add('workMode', null, 'No work-mode preference set')
 
   // --- 9. salary ------------------------------------------------------------
-  const pref = cand.preferences
-  if (pref.minSalary && job.salary && (job.salary.max ?? job.salary.min)) {
+  if (ctx.filters?.salary) {
+    add(
+      'salary',
+      null,
+      job.salary ? 'Applied as a filter (pay meets your minimum)' : 'Salary not disclosed'
+    )
+  } else if (pref.minSalary && job.salary && (job.salary.max ?? job.salary.min)) {
     const top = annualize((job.salary.max ?? job.salary.min)!, job.salary.period)
     const want = annualize(
       pref.minSalary,
@@ -262,7 +282,9 @@ export function scoreMatch(
   }
 
   // --- 10. employment type --------------------------------------------------
-  if (pref.employmentTypes.length && job.employmentTypes.length) {
+  if (ctx.filters?.employmentType) {
+    add('employmentType', null, 'Applied as a filter')
+  } else if (pref.employmentTypes?.length && job.employmentTypes.length) {
     const ok = job.employmentTypes.some((t) => pref.employmentTypes.includes(t))
     add(
       'employmentType',
@@ -273,7 +295,20 @@ export function scoreMatch(
     )
   } else add('employmentType', null, 'Employment type preference or job type unknown')
 
-  // --- 11. semantic similarity (optional) -----------------------------------
+  // --- 11. preferred skills (from the search criteria) -----------------------
+  if (ctx.preferredSkills?.length) {
+    const hay = `${job.title}\n${job.description}`.toLowerCase()
+    const found = ctx.preferredSkills.filter((s) => hay.includes(s.toLowerCase()))
+    add(
+      'preferredSkills',
+      found.length / ctx.preferredSkills.length,
+      found.length
+        ? `Mentions ${found.join(', ')}`
+        : `Does not mention ${ctx.preferredSkills.join(', ')}`
+    )
+  }
+
+  // --- 12. semantic similarity (optional) -----------------------------------
   if (ctx.semantic) {
     add(
       'semantic',

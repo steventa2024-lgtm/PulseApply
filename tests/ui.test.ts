@@ -101,6 +101,12 @@ describe.skipIf(!BUILT || !CHROMIUM)('renderer UI against the real IPC handlers'
     await expect(page.getByText(/Filtered out:.*different occupation/).isVisible()).resolves.toBe(
       true
     )
+    // Counters come from the database and agree with the rendered list.
+    const counters = await svc.criteria.counters()
+    expect(counters.eligible).toBe(titles.length)
+    await expect(
+      page.getByTestId('result-counters').getByText('Currently eligible').isVisible()
+    ).resolves.toBe(true)
     // Sidebar badge equals the number of cards rendered.
     const badge = await page
       .getByRole('navigation', { name: 'Main' })

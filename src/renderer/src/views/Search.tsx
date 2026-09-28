@@ -34,7 +34,7 @@ import { cx } from '../lib/cx'
 import { call, useEvent } from '../lib/api'
 import { EMPLOYMENT_LABEL } from '../lib/format'
 import { useApp } from '../lib/appContext'
-import { EMPTY_CRITERIA, clean } from '../lib/criteria'
+import { EMPTY_CRITERIA, clean, splitList } from '../lib/criteria'
 
 const EMPLOYMENT: EmploymentType[] = [
   'full_time',
@@ -217,10 +217,14 @@ function SaveSearchForm({
 }
 
 export default function Search(): React.JSX.Element {
-  const { go, setLastSearch, toast, draftCriteria, setDraftCriteria, lastSearch } = useApp()
-  const [c, setC] = useState<SearchCriteria>(
-    draftCriteria ?? lastSearch?.criteria ?? EMPTY_CRITERIA
+  const { go, setLastSearch, toast, refreshCounters } = useApp()
+  const [c, setC] = useState<SearchCriteria>(EMPTY_CRITERIA)
+  const [savedLabel, setSavedLabel] = useState<string | null>(null)
+  const [savedKey, setSavedKey] = useState<string>('')
+  const [occupations, setOccupations] = useState<{ id: string; label: string; family: string }[]>(
+    []
   )
+  const [savingCriteria, setSavingCriteria] = useState(false)
   const [countries, setCountries] = useState<{ code: string; name: string }[]>([])
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [preview, setPreview] = useState<SearchIntent | null>(null)
@@ -230,16 +234,26 @@ export default function Search(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [saveOpen, setSaveOpen] = useState(false)
   const runIdRef = useRef<string | null>(null)
+  const touched = useRef(false)
 
   useEffect(() => {
-    setDraftCriteria(null)
+    call('criteria:get')
+      .then((r) => {
+        // Never overwrite what the user already started typing.
+        if (!touched.current) setC({ ...EMPTY_CRITERIA, ...r.criteria })
+        setSavedLabel(r.label)
+        setSavedKey(JSON.stringify(clean({ ...EMPTY_CRITERIA, ...r.criteria })))
+      })
+      .catch(() => undefined)
+    call('criteria:occupations')
+      .then(setOccupations)
+      .catch(() => undefined)
     call('geo:countries')
       .then(setCountries)
       .catch(() => undefined)
     call('sources:list')
       .then(setProviders)
       .catch(() => undefined)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -262,8 +276,10 @@ export default function Search(): React.JSX.Element {
     setProgress((prev) => [...prev, p])
   })
 
-  const set = <K extends keyof SearchCriteria>(k: K, v: SearchCriteria[K]): void =>
+  const set = <K extends keyof SearchCriteria>(k: K, v: SearchCriteria[K]): void => {
+    touched.current = true
     setC((x) => ({ ...x, [k]: v }))
+  }
   const searchable = providers.filter((p) => !['restricted', 'discovery'].includes(p.kind))
 
   const run = async (): Promise<void> => {
@@ -282,8 +298,11 @@ export default function Search(): React.JSX.Element {
         intent: res.intent,
         stats: res.stats,
         jobs: res.jobs,
+        review: res.review,
+        runId: res.runId,
         finishedAt: res.finishedAt
       })
+      refreshCounters()
       go('results')
     } catch (e) {
       setError((e as Error).message)
@@ -292,6 +311,26 @@ export default function Search(): React.JSX.Element {
       setRunning(null)
     }
   }
+
+  const dirty = JSON.stringify(clean(c)) !== savedKey
+  const saveCriteria = async (): Promise<void> => {
+    setSavingCriteria(true)
+    try {
+      const res = await call('criteria:save', clean(c))
+      setSavedKey(JSON.stringify(clean({ ...EMPTY_CRITERIA, ...res.criteria })))
+      setSavedLabel(res.counters.criteriaLabel)
+      refreshCounters()
+      toast(
+        `Criteria saved — ${res.counters.eligible} stored job${res.counters.eligible === 1 ? '' : 's'} now match (${res.counters.excluded} excluded)`,
+        'success'
+      )
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setSavingCriteria(false)
+    }
+  }
+  const occLabel = (id: string): string => occupations.find((o) => o.id === id)?.label ?? id
 
   const providerRows = useMemo(() => {
     const map = new Map<string, SearchProgress['provider']>()
@@ -304,8 +343,14 @@ export default function Search(): React.JSX.Element {
     <div>
       <PageHeader
         title="Search"
-        subtitle="Describe the job you want in plain words, or use the filters. Only real listings from connected sources are returned."
+        subtitle="These are your saved match criteria. The same criteria drive Results, the dashboard, scheduled searches and Telegram."
       />
+      {savedLabel && (
+        <p className="-mt-3 mb-4 text-[11px] text-slate-400" data-testid="active-criteria">
+          Active criteria: <span className="text-slate-200">{savedLabel}</span>
+          {dirty && <span className="ml-2 text-amber-300">· unsaved changes</span>}
+        </p>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         <Card>
@@ -489,11 +534,195 @@ export default function Search(): React.JSX.Element {
               Jobs that do not publish pay are kept (shown as “Not disclosed”) — only confirmed pay
               below your minimum is filtered out.
             </p>
-            <Toggle
-              checked={c.includeUnknownLocations ?? true}
-              onChange={(v) => set('includeUnknownLocations', v)}
-              label="Include jobs whose location cannot be verified (flagged as unknown)"
-            />
+            <fieldset className="rounded-lg border border-white/[0.06] p-3">
+              <legend className="px-1 text-[11px] uppercase tracking-wide text-slate-400">
+                Location filter
+              </legend>
+              <div className="space-y-2 text-xs">
+                <label className="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name="locmode"
+                    className="mt-0.5"
+                    checked={(c.locationMode ?? 'strict') === 'strict'}
+                    onChange={() => set('locationMode', 'strict')}
+                  />
+                  <span>
+                    <span className="font-medium text-slate-100">Strict (recommended)</span>
+                    <span className="block text-slate-400">
+                      Only jobs inside the radius (or remote jobs open to your country, if Remote is
+                      selected). Everything else is excluded before scoring.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name="locmode"
+                    className="mt-0.5"
+                    checked={c.locationMode === 'preferred'}
+                    onChange={() => set('locationMode', 'preferred')}
+                  />
+                  <span>
+                    <span className="font-medium text-slate-100">Preferred only</span>
+                    <span className="block text-slate-400">
+                      Show jobs in any location; jobs inside the radius rank higher and jobs outside
+                      it are labelled “Outside your preferred area”.
+                    </span>
+                  </span>
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Jobs whose location cannot be verified are never mixed in — they are listed
+                  separately under “Location could not be verified”.
+                </p>
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-3 rounded-lg border border-white/[0.06] p-3">
+              <legend className="px-1 text-[11px] uppercase tracking-wide text-slate-400">
+                Occupation & match
+              </legend>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="occ-add" hint="(besides what you typed)">
+                    Target occupations
+                  </Label>
+                  <Select
+                    id="occ-add"
+                    value=""
+                    onChange={(e) =>
+                      e.target.value &&
+                      set('targetOccupations', [
+                        ...new Set([...(c.targetOccupations ?? []), e.target.value])
+                      ])
+                    }
+                  >
+                    <option value="">Add an occupation…</option>
+                    {occupations.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {(c.targetOccupations ?? []).map((o) => (
+                      <Chip
+                        key={o}
+                        active
+                        onClick={() =>
+                          set(
+                            'targetOccupations',
+                            (c.targetOccupations ?? []).filter((x) => x !== o)
+                          )
+                        }
+                      >
+                        {occLabel(o)} ×
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="occ-ex">Never show these occupations</Label>
+                  <Select
+                    id="occ-ex"
+                    value=""
+                    onChange={(e) =>
+                      e.target.value &&
+                      set('excludedOccupations', [
+                        ...new Set([...(c.excludedOccupations ?? []), e.target.value])
+                      ])
+                    }
+                  >
+                    <option value="">Exclude an occupation…</option>
+                    {occupations.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {(c.excludedOccupations ?? []).map((o) => (
+                      <Chip
+                        key={o}
+                        active={false}
+                        onClick={() =>
+                          set(
+                            'excludedOccupations',
+                            (c.excludedOccupations ?? []).filter((x) => x !== o)
+                          )
+                        }
+                      >
+                        {occLabel(o)} ×
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="occ-match">Occupation match</Label>
+                  <Select
+                    id="occ-match"
+                    value={c.occupationMatch ?? 'related'}
+                    onChange={(e) => set('occupationMatch', e.target.value as 'exact' | 'related')}
+                  >
+                    <option value="related">Same or closely related occupations</option>
+                    <option value="exact">Same occupation only</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="min-score" hint="(0 = show all eligible)">
+                    Minimum match score
+                  </Label>
+                  <Input
+                    id="min-score"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={c.minimumMatchScore ?? 0}
+                    onChange={(e) => set('minimumMatchScore', Number(e.target.value) || undefined)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="req-skills" hint="(comma-separated; job must mention each)">
+                    Required skills
+                  </Label>
+                  <Input
+                    id="req-skills"
+                    defaultValue={(c.requiredSkills ?? []).join(', ')}
+                    key={`req-${savedKey}`}
+                    placeholder="e.g. forklift"
+                    onBlur={(e) => set('requiredSkills', splitList(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pref-skills" hint="(raise the score)">
+                    Preferred skills
+                  </Label>
+                  <Input
+                    id="pref-skills"
+                    defaultValue={(c.preferredSkills ?? []).join(', ')}
+                    key={`pref-${savedKey}`}
+                    placeholder="e.g. RF scanner, pallet jack"
+                    onBlur={(e) => set('preferredSkills', splitList(e.target.value))}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="ex-kw" hint="(comma-separated, matched in the job title)">
+                  Excluded title keywords
+                </Label>
+                <Input
+                  id="ex-kw"
+                  defaultValue={(c.excludedKeywords ?? []).join(', ')}
+                  key={`exkw-${savedKey}`}
+                  placeholder="e.g. driver, sales"
+                  onBlur={(e) => set('excludedKeywords', splitList(e.target.value))}
+                />
+              </div>
+            </fieldset>
             <details className="rounded-lg border border-white/[0.06] p-3">
               <summary className="cursor-pointer text-xs text-slate-300">
                 Sources (
@@ -537,10 +766,15 @@ export default function Search(): React.JSX.Element {
                 </Button>
               )}
               <Button
-                disabled={!c.query.trim()}
-                onClick={() => setSaveOpen(true)}
+                loading={savingCriteria}
+                disabled={!dirty}
+                onClick={() => void saveCriteria()}
                 icon={<Save className="h-3.5 w-3.5" />}
+                title="Save without searching; stored results are re-checked immediately"
               >
+                Save criteria
+              </Button>
+              <Button disabled={!c.query.trim()} onClick={() => setSaveOpen(true)}>
                 Save as scheduled search
               </Button>
               <Button variant="ghost" onClick={() => setC(EMPTY_CRITERIA)}>

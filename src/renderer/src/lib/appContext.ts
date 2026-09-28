@@ -1,5 +1,11 @@
 import { createContext, useContext } from 'react'
-import type { ScoredJob, SearchCriteria, SearchIntent, SearchStats } from '../../../shared/types'
+import type {
+  JobCounters,
+  ScoredJob,
+  SearchCriteria,
+  SearchIntent,
+  SearchStats
+} from '../../../shared/types'
 
 export type View =
   | 'dashboard'
@@ -8,6 +14,7 @@ export type View =
   | 'applications'
   | 'automation'
   | 'sources'
+  | 'resume'
   | 'profile'
   | 'settings'
 
@@ -16,6 +23,8 @@ export interface LastSearch {
   intent: SearchIntent
   stats: SearchStats
   jobs: ScoredJob[]
+  review?: ScoredJob[]
+  runId?: string
   finishedAt: string
 }
 
@@ -34,8 +43,9 @@ export interface AppState {
   toasts: Toast[]
   toast: (text: string, tone?: Toast['tone']) => void
   dismissToast: (id: number) => void
-  draftCriteria: SearchCriteria | null
-  setDraftCriteria: (c: SearchCriteria | null) => void
+  /** Result counters from the database, evaluated against the active criteria. */
+  counters: JobCounters | null
+  refreshCounters: () => void
 }
 
 export const Ctx = createContext<AppState | null>(null)

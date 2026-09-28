@@ -37,17 +37,17 @@ export const APP_STATE_LABEL: Record<ApplicationState, string> = {
   DISCOVERED: 'Discovered',
   SAVED: 'Saved',
   QUEUED: 'Queued',
-  OPENING: 'Opening',
+  OPENING: 'Preparing',
   AUTOFILLING: 'Autofilling',
-  NEEDS_USER_INPUT: 'Needs your input',
-  READY_FOR_REVIEW: 'Ready for review',
-  APPROVED: 'Approved',
+  NEEDS_USER_INPUT: 'Needs review',
+  READY_FOR_REVIEW: 'Ready to submit',
+  APPROVED: 'Approved — submitting',
   SUBMITTING: 'Submitting',
   SUBMITTED: 'Submitted (confirmed)',
   SUBMISSION_UNVERIFIED: 'Submission unverified',
   FAILED: 'Failed',
   CANCELLED: 'Cancelled',
-  MANUAL_COMPLETION_REQUIRED: 'Manual completion'
+  MANUAL_COMPLETION_REQUIRED: 'Manual completion required'
 }
 
 export type Tone = 'cyan' | 'green' | 'amber' | 'red' | 'slate' | 'violet'
@@ -151,5 +151,8 @@ export const EXCLUSION_LABEL: Record<string, string> = {
   excluded_keyword: 'matched an excluded keyword',
   excluded_company: 'excluded company',
   malformed: 'malformed',
-  expired: 'expired'
+  expired: 'expired',
+  work_mode: 'work mode not selected',
+  missing_required_skill: 'missing a required skill',
+  below_minimum_score: 'below your minimum match score'
 }

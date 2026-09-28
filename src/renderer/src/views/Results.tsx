@@ -15,10 +15,15 @@ import {
   ShieldCheck,
   X
 } from 'lucide-react'
-import type { ResumeRecord, ScoredJob, VerificationStatus } from '../../../shared/types'
+import type {
+  ExclusionReason,
+  ResumeRecord,
+  ScoredJob,
+  VerificationStatus
+} from '../../../shared/types'
 import { Badge, Button, Card, Chip, Empty, Modal, PageHeader, Select } from '../components/ui'
 import { cx } from '../lib/cx'
-import { call } from '../lib/api'
+import { call, useEvent } from '../lib/api'
 import {
   APP_STATE_LABEL,
   APP_STATE_TONE,
@@ -31,35 +36,63 @@ import {
 } from '../lib/format'
 import { useApp } from '../lib/appContext'
 
-type ViewMode = 'results' | 'saved' | 'all' | 'dismissed'
+type ViewMode = 'eligible' | 'new' | 'review' | 'excluded' | 'saved' | 'archive' | 'dismissed'
 type Sort = 'match' | 'date' | 'distance'
 const PAGE = 30
 
+const REASON_GROUPS: { id: string; label: string; reasons: ExclusionReason[] }[] = [
+  {
+    id: 'location',
+    label: 'Location',
+    reasons: ['outside_radius', 'outside_country', 'remote_ineligible']
+  },
+  {
+    id: 'occupation',
+    label: 'Occupation',
+    reasons: ['irrelevant_occupation', 'excluded_occupation']
+  },
+  {
+    id: 'workMode',
+    label: 'Work mode',
+    reasons: ['remote_not_requested', 'onsite_not_requested', 'work_mode']
+  },
+  { id: 'belowScore', label: 'Below minimum score', reasons: ['below_minimum_score'] },
+  { id: 'expired', label: 'Expired', reasons: ['expired'] }
+]
+
 export default function Results(): React.JSX.Element {
-  const { lastSearch, updateJob, go, toast, setDraftCriteria } = useApp()
-  const [mode, setMode] = useState<ViewMode>('results')
-  const [other, setOther] = useState<ScoredJob[]>([])
-  const [minScore, setMinScore] = useState(0)
+  const { lastSearch, go, toast, counters, refreshCounters } = useApp()
+  const [mode, setMode] = useState<ViewMode>('eligible')
+  const [reason, setReason] = useState<ExclusionReason | ''>('')
+  const [jobsRaw, setJobs] = useState<ScoredJob[] | null>(null)
   const [verif, setVerif] = useState<VerificationStatus | ''>('')
   const [sort, setSort] = useState<Sort>('match')
   const [shown, setShown] = useState(PAGE)
   const [selected, setSelected] = useState<ScoredJob | null>(null)
   const [links, setLinks] = useState<{ providerId: string; name: string; url: string }[]>([])
+  const [reload, setReload] = useState(0)
 
   const changeMode = (m: ViewMode): void => {
     setMode(m)
+    setReason('')
     setShown(PAGE)
   }
 
   useEffect(() => {
-    if (mode === 'results') return
+    let live = true
     call('jobs:list', {
-      view: mode === 'saved' ? 'saved' : mode === 'dismissed' ? 'dismissed' : 'all',
-      limit: 1000
+      view: mode,
+      runId: mode === 'new' ? counters?.lastRun?.runId : undefined,
+      reason: mode === 'excluded' && reason ? reason : undefined,
+      limit: 2000
     })
-      .then(setOther)
+      .then((j) => live && setJobs(j))
       .catch((e) => toast((e as Error).message, 'error'))
-  }, [mode, toast])
+    return () => {
+      live = false
+    }
+  }, [mode, reason, reload, counters?.criteriaKey, counters?.lastRun?.runId, toast])
+  useEvent('jobs:changed', () => setReload((n) => n + 1))
 
   useEffect(() => {
     if (lastSearch)
@@ -68,12 +101,8 @@ export default function Results(): React.JSX.Element {
         .catch(() => setLinks([]))
   }, [lastSearch])
 
-  const base =
-    mode === 'results' ? (lastSearch?.jobs ?? []).filter((j) => !j.state.dismissed) : other
   const jobs = useMemo(() => {
-    const list = base.filter(
-      (j) => (j.match?.score ?? 0) >= minScore && (!verif || j.verificationStatus === verif)
-    )
+    const list = (jobsRaw ?? []).filter((j) => !verif || j.verificationStatus === verif)
     return [...list].sort((a, b) =>
       sort === 'date'
         ? (b.postedAt ?? b.discoveredAt).localeCompare(a.postedAt ?? a.discoveredAt)
@@ -81,75 +110,125 @@ export default function Results(): React.JSX.Element {
           ? (a.geo.distance ?? 1e9) - (b.geo.distance ?? 1e9)
           : (b.match?.score ?? -1) - (a.match?.score ?? -1) || b.relevance.score - a.relevance.score
     )
-  }, [base, minScore, verif, sort])
+  }, [jobsRaw, verif, sort])
 
   const replace = (j: ScoredJob | null): void => {
     if (!j) return
-    updateJob(j)
-    setOther((list) => list.map((x) => (x.id === j.id ? { ...x, ...j } : x)))
-    setSelected((s) => (s && s.id === j.id ? { ...s, ...j } : s))
+    setJobs((list) => (list ?? []).map((x) => (x.id === j.id ? { ...x, ...j } : x)))
+    setSelected((cur) => (cur && cur.id === j.id ? { ...cur, ...j } : cur))
+    refreshCounters()
   }
   const save = async (j: ScoredJob): Promise<void> =>
     replace(await call('jobs:save', { id: j.id, saved: !j.state.saved }))
   const dismiss = async (j: ScoredJob): Promise<void> => {
-    const res = await call('jobs:dismiss', { id: j.id, dismissed: !j.state.dismissed })
-    replace(res)
-    if (mode === 'dismissed') setOther((l) => l.filter((x) => x.id !== j.id))
+    await call('jobs:dismiss', { id: j.id, dismissed: !j.state.dismissed })
+    setJobs((l) => (l ?? []).filter((x) => x.id !== j.id))
     if (selected?.id === j.id) setSelected(null)
+    refreshCounters()
   }
 
   const stats = lastSearch?.stats
-  const excluded = stats ? Object.entries(stats.excluded).filter(([, n]) => n) : []
   const failed = stats?.providers.filter((p) => p.status === 'error') ?? []
   const queried = stats?.providers.filter((p) => p.status === 'ok' || p.status === 'cached') ?? []
+  const skipped = stats?.providers.filter((p) => p.status === 'skipped') ?? []
+  const c = counters
+  const tabs: { id: ViewMode; label: string; n?: number; help: string }[] = [
+    { id: 'eligible', label: 'Eligible', n: c?.eligible, help: 'Meet every criterion' },
+    {
+      id: 'new',
+      label: 'New in last search',
+      n: c?.eligibleNew,
+      help: 'Eligible jobs first seen in your most recent search'
+    },
+    {
+      id: 'review',
+      label: 'Location could not be verified',
+      n: c?.review,
+      help: 'The posting does not say where the job is; check before applying'
+    },
+    { id: 'excluded', label: 'Excluded', n: c?.excluded, help: 'Failed at least one criterion' },
+    { id: 'saved', label: 'Saved', n: c?.saved, help: 'Jobs you saved' },
+    {
+      id: 'archive',
+      label: 'History',
+      n: c?.historical,
+      help: 'Every job ever stored, regardless of your current criteria'
+    },
+    { id: 'dismissed', label: 'Dismissed', n: c?.dismissed, help: 'Hidden by you' }
+  ]
 
   return (
     <div>
       <PageHeader
         title="Results"
-        subtitle={
-          lastSearch && mode === 'results'
-            ? `“${lastSearch.criteria.query}”${lastSearch.criteria.location ? ` near ${lastSearch.criteria.location}` : ''} · searched ${timeAgo(lastSearch.finishedAt)}`
-            : 'Jobs stored in your local index'
-        }
+        subtitle={c ? `Criteria: ${c.criteriaLabel}` : 'Jobs stored in your local index'}
         actions={
-          <Button
-            icon={<RefreshCw className="h-3.5 w-3.5" />}
-            onClick={() => {
-              if (lastSearch) setDraftCriteria(lastSearch.criteria)
-              go('search')
-            }}
-          >
-            Refine search
+          <Button icon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => go('search')}>
+            Edit criteria
           </Button>
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {(['results', 'saved', 'all', 'dismissed'] as ViewMode[]).map((m) => (
-          <Chip key={m} active={mode === m} onClick={() => changeMode(m)}>
-            {m === 'results'
-              ? `Last search (${(lastSearch?.jobs ?? []).filter((j) => !j.state.dismissed).length})`
-              : m === 'all'
-                ? 'All stored jobs'
-                : m[0].toUpperCase() + m.slice(1)}
+      {c && (
+        <div
+          className="mb-4 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4 lg:grid-cols-6"
+          data-testid="result-counters"
+        >
+          <Counter
+            k="Newly fetched"
+            v={c.lastRun?.newJobs ?? 0}
+            sub={
+              c.lastRun
+                ? `of ${c.lastRun.fetched} in last search · ${timeAgo(c.lastRun.finishedAt ?? '')}`
+                : 'no search yet'
+            }
+          />
+          <Counter k="Historical" v={c.historical} sub="stored jobs (all searches)" />
+          <Counter k="Currently eligible" v={c.eligible} sub="meet all criteria" tone="good" />
+          <Counter k="Needs review" v={c.review} sub="location not verifiable" tone="warn" />
+          <Counter
+            k="Excluded"
+            v={c.excluded}
+            sub={`location ${c.excludedBy.location} · occupation ${c.excludedBy.occupation} · below score ${c.excludedBy.belowScore}`}
+          />
+          <Counter
+            k="Unverified"
+            v={c.unverified}
+            sub={`eligible but stale/unverified · ${c.excludedBy.expired} expired`}
+          />
+        </div>
+      )}
+
+      <div className="mb-3 flex flex-wrap items-center gap-2" role="tablist">
+        {tabs.map((t) => (
+          <Chip key={t.id} active={mode === t.id} onClick={() => changeMode(t.id)}>
+            <span title={t.help}>
+              {t.label}
+              {t.n !== undefined ? ` (${t.n})` : ''}
+            </span>
           </Chip>
         ))}
-        <span className="mx-2 h-4 w-px bg-white/10" />
-        <label className="text-[11px] text-slate-400">
-          Min match
-          <Select
-            className="ml-1.5 inline-block w-20 py-1"
-            value={minScore}
-            onChange={(e) => setMinScore(Number(e.target.value))}
-          >
-            {[0, 40, 60, 75].map((v) => (
-              <option key={v} value={v}>
-                {v || 'any'}
-              </option>
-            ))}
-          </Select>
-        </label>
+      </div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {mode === 'excluded' && (
+          <label className="text-[11px] text-slate-400">
+            Reason
+            <Select
+              className="ml-1.5 inline-block w-56 py-1"
+              value={reason}
+              onChange={(e) => setReason(e.target.value as ExclusionReason | '')}
+            >
+              <option value="">any</option>
+              {REASON_GROUPS.flatMap((g) => g.reasons).map((r) => (
+                <option key={r} value={r}>
+                  {EXCLUSION_LABEL[r] ?? r}
+                </option>
+              ))}
+              <option value="employment_type">{EXCLUSION_LABEL.employment_type}</option>
+              <option value="salary_below_minimum">{EXCLUSION_LABEL.salary_below_minimum}</option>
+            </Select>
+          </label>
+        )}
         <label className="text-[11px] text-slate-400">
           Verification
           <Select
@@ -179,22 +258,44 @@ export default function Results(): React.JSX.Element {
         </label>
       </div>
 
-      {mode === 'results' && stats && (
+      {mode === 'review' && (
+        <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+          Location could not be verified. These postings do not state a place PulseApply can check
+          against your radius (e.g. “Multiple locations”). They are kept out of your main results —
+          open the original listing to confirm where the job is.
+        </p>
+      )}
+      {mode === 'archive' && (
+        <p className="mb-3 text-[11px] text-slate-500">
+          History shows every stored job from every search, including jobs that do not meet your
+          current criteria. Nothing here is counted as a current result.
+        </p>
+      )}
+
+      {stats && (mode === 'eligible' || mode === 'new') && (
         <Card className="mb-4">
           <div className="flex flex-wrap items-start justify-between gap-4 text-[11px]">
             <div className="space-y-1 text-slate-400">
               <p>
-                <span className="text-slate-200">{stats.returned}</span> result
-                {stats.returned === 1 ? '' : 's'} ({stats.newJobs} new) from {stats.fetched}{' '}
-                listings across {queried.length} source
-                {queried.length === 1 ? '' : 's'}; {stats.duplicatesMerged} duplicate
+                Last search: {stats.fetched} listings from {queried.length} source
+                {queried.length === 1 ? '' : 's'} → {stats.returned} eligible
+                {stats.review ? `, ${stats.review} location unverified` : ''};{' '}
+                {stats.duplicatesMerged} duplicate
                 {stats.duplicatesMerged === 1 ? '' : 's'} merged.
               </p>
-              {excluded.length > 0 && (
+              {Object.entries(stats.excluded).filter(([, n]) => n).length > 0 && (
                 <p>
                   Filtered out:{' '}
-                  {excluded.map(([k, n]) => `${n} ${EXCLUSION_LABEL[k] ?? k}`).join(' · ')}
+                  {Object.entries(stats.excluded)
+                    .filter(([, n]) => n)
+                    .map(([k, n]) => `${n} ${EXCLUSION_LABEL[k] ?? k}`)
+                    .join(' · ')}
                   {stats.rejectedMalformed ? ` · ${stats.rejectedMalformed} malformed` : ''}
+                </p>
+              )}
+              {skipped.length > 0 && (
+                <p className="text-slate-500">
+                  Not queried: {skipped.map((f) => `${f.providerName} (${f.reason})`).join('; ')}
                 </p>
               )}
               {failed.length > 0 && (
@@ -232,14 +333,17 @@ export default function Results(): React.JSX.Element {
         </Card>
       )}
 
-      {jobs.length === 0 ? (
+      {jobsRaw === null ? (
+        <p className="text-xs text-slate-500">Loading…</p>
+      ) : jobs.length === 0 ? (
         <ResultsEmpty
           mode={mode}
-          hasSearch={!!lastSearch}
-          excluded={excluded.length > 0}
+          hasSearch={!!c?.lastRun}
+          excluded={(c?.excluded ?? 0) > 0}
           failedAll={!!stats && queried.length === 0}
           onSearch={() => go('search')}
           onSources={() => go('sources')}
+          onExcluded={() => changeMode('excluded')}
         />
       ) : (
         <div className="space-y-3">
@@ -254,7 +358,7 @@ export default function Results(): React.JSX.Element {
           ))}
           {jobs.length > shown && (
             <div className="flex justify-center pt-2">
-              <Button onClick={() => setShown((s) => s + PAGE)}>
+              <Button onClick={() => setShown((x) => x + PAGE)}>
                 Show {Math.min(PAGE, jobs.length - shown)} more
               </Button>
             </div>
@@ -275,13 +379,43 @@ export default function Results(): React.JSX.Element {
   )
 }
 
+function Counter({
+  k,
+  v,
+  sub,
+  tone
+}: {
+  k: string
+  v: number
+  sub: string
+  tone?: 'good' | 'warn'
+}): React.JSX.Element {
+  return (
+    <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-3 py-2">
+      <p className="text-slate-400">{k}</p>
+      <p
+        className={cx(
+          'font-mono text-lg font-bold',
+          tone === 'good' ? 'text-emerald-300' : tone === 'warn' ? 'text-amber-300' : 'text-white'
+        )}
+      >
+        {v}
+      </p>
+      <p className="truncate text-[10px] text-slate-500" title={sub}>
+        {sub}
+      </p>
+    </div>
+  )
+}
+
 function ResultsEmpty({
   mode,
   hasSearch,
   excluded,
   failedAll,
   onSearch,
-  onSources
+  onSources,
+  onExcluded
 }: {
   mode: ViewMode
   hasSearch: boolean
@@ -289,14 +423,10 @@ function ResultsEmpty({
   failedAll: boolean
   onSearch: () => void
   onSources: () => void
+  onExcluded: () => void
 }): React.JSX.Element {
-  if (mode !== 'results')
-    return (
-      <Empty
-        icon={<Layers className="h-8 w-8" />}
-        title={`No ${mode === 'all' ? 'stored' : mode} jobs`}
-      />
-    )
+  if (mode !== 'eligible' && mode !== 'new')
+    return <Empty icon={<Layers className="h-8 w-8" />} title="Nothing here" />
   if (!hasSearch)
     return (
       <Empty
@@ -318,19 +448,24 @@ function ResultsEmpty({
         title="No job source could be queried"
         action={<Button onClick={onSources}>Check sources</Button>}
       >
-        Every eligible source was skipped or failed (see the summary above). Local searches need at
-        least one aggregator key (Adzuna, Jooble or USAJOBS) or registered employer boards.
+        Every eligible source was skipped or failed. Local searches need at least one aggregator key
+        (Adzuna, Jooble, CareerOneStop or USAJOBS) or registered employer boards.
       </Empty>
     )
   if (excluded)
     return (
       <Empty
         icon={<Layers className="h-8 w-8" />}
-        title="Listings were found, but your filters excluded all of them"
-        action={<Button onClick={onSearch}>Adjust filters</Button>}
+        title="No stored job meets your current criteria"
+        action={
+          <div className="flex gap-2">
+            <Button onClick={onExcluded}>See why jobs were excluded</Button>
+            <Button onClick={onSearch}>Edit criteria</Button>
+          </div>
+        }
       >
-        The summary above lists why each listing was excluded (different occupation, outside radius,
-        remote eligibility…). Try a wider radius or different work modes.
+        Jobs from earlier searches are kept in History but are only shown here when they meet your
+        current occupation, location and work-mode criteria.
       </Empty>
     )
   return (
@@ -403,6 +538,19 @@ function JobCard({
                 : job.sources[0]?.providerName}
             </Badge>
             {job.isNew && <Badge tone="violet">New</Badge>}
+            {job.eligibility && job.eligibility.status !== 'eligible' && (
+              <Badge
+                tone={job.eligibility.status === 'review' ? 'amber' : 'red'}
+                title={job.eligibility.exclusionReasons
+                  .map((r) => EXCLUSION_LABEL[r] ?? r)
+                  .join(', ')}
+              >
+                {job.eligibility.summary}
+              </Badge>
+            )}
+            {job.eligibility?.locationStatus === 'outside_preferred' && (
+              <Badge tone="amber">Outside your preferred area</Badge>
+            )}
             {job.isDemo && <Badge tone="amber">DEMO</Badge>}
             {job.state.applicationState && (
               <Badge tone={APP_STATE_TONE[job.state.applicationState]}>
@@ -486,7 +634,7 @@ function JobCard({
             void call('jobs:open-external', { url: job.canonicalJobUrl ?? job.sourceUrl })
           }
         >
-          Original listing
+          Open original listing
         </Button>
         <Button
           size="sm"
@@ -494,7 +642,7 @@ function JobCard({
           icon={<Info className="h-3 w-3" />}
           onClick={job.state.applicationId ? () => go('applications') : onOpen}
         >
-          {job.state.applicationId ? 'View application' : 'Details & apply'}
+          {job.state.applicationId ? 'View application' : 'Details'}
         </Button>
       </div>
     </article>
@@ -589,15 +737,27 @@ function JobDetail({
             >
               {job.state.applicationId
                 ? APP_STATE_LABEL[job.state.applicationState!]
-                : 'Apply with autofill'}
+                : 'Prepare application'}
+            </Button>
+            <Button
+              icon={
+                job.state.saved ? (
+                  <BookmarkCheck className="h-3.5 w-3.5" />
+                ) : (
+                  <Bookmark className="h-3.5 w-3.5" />
+                )
+              }
+              onClick={onSave}
+            >
+              {job.state.saved ? 'Saved' : 'Save job'}
             </Button>
             <Button
               icon={<ArrowUpRight className="h-3.5 w-3.5" />}
               onClick={() =>
-                void call('jobs:open-external', { url: job.applyUrl ?? job.sourceUrl })
+                void call('jobs:open-external', { url: job.canonicalJobUrl ?? job.sourceUrl })
               }
             >
-              Open application page
+              Open original listing
             </Button>
             <Button
               icon={<ShieldCheck className="h-3.5 w-3.5" />}
@@ -605,9 +765,6 @@ function JobDetail({
               onClick={verify}
             >
               Check availability
-            </Button>
-            <Button variant="ghost" onClick={onSave}>
-              {job.state.saved ? 'Unsave' : 'Save'}
             </Button>
             <Button variant="ghost" onClick={onDismiss}>
               Dismiss
@@ -625,6 +782,38 @@ function JobDetail({
                 ))}
               </ul>
             </div>
+          )}
+
+          {job.eligibility && (
+            <Card
+              className="mb-4"
+              title={
+                job.eligibility.status === 'eligible'
+                  ? 'Meets your criteria'
+                  : job.eligibility.status === 'review'
+                    ? 'Location could not be verified'
+                    : 'Does not meet your criteria'
+              }
+              subtitle="Hard filters are checked before any score is calculated"
+            >
+              <dl className="grid grid-cols-3 gap-2 text-[11px]">
+                <Fact k="Occupation" v={job.eligibility.occupationStatus} />
+                <Fact k="Location" v={job.eligibility.locationStatus.replace(/_/g, ' ')} />
+                <Fact k="Work mode" v={job.eligibility.workModeStatus} />
+              </dl>
+              {job.eligibility.exclusionReasons.length > 0 && (
+                <ul className="mt-2 list-disc pl-5 text-[11px] text-rose-200">
+                  {job.eligibility.exclusionReasons.map((r) => (
+                    <li key={r}>{EXCLUSION_LABEL[r] ?? r}</li>
+                  ))}
+                </ul>
+              )}
+              {job.eligibility.missingData.length > 0 && (
+                <p className="mt-2 text-[11px] text-slate-400">
+                  Not stated in the posting: {job.eligibility.missingData.join(', ')}
+                </p>
+              )}
+            </Card>
           )}
 
           {job.match ? (
@@ -667,6 +856,10 @@ function JobDetail({
               </table>
               <p className="mt-2 text-[10px] text-slate-500">{job.match.disclaimer}</p>
             </Card>
+          ) : job.eligibility?.status === 'excluded' ? (
+            <p className="mb-4 rounded-lg border border-white/10 p-3 text-xs text-slate-400">
+              Not scored: jobs that fail your criteria are not given a match score.
+            </p>
           ) : (
             <p className="mb-4 rounded-lg border border-white/10 p-3 text-xs text-slate-400">
               Upload a resume on the Profile page to see how this job matches your qualifications.
@@ -779,13 +972,13 @@ function JobDetail({
 
       <Modal
         open={applyOpen}
-        title="Start application"
+        title="Prepare application"
         onClose={() => setApplyOpen(false)}
         footer={
           <>
             <Button onClick={() => setApplyOpen(false)}>Cancel</Button>
             <Button variant="primary" loading={starting} onClick={start}>
-              Open & autofill
+              Open real application page & autofill
             </Button>
           </>
         }

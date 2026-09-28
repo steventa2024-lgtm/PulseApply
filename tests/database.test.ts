@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { describe, expect, it } from 'vitest'
 import { AppDb } from '../src/main/services/persistence/database'
+import { MIGRATIONS } from '../src/main/services/persistence/migrations'
 import { makeServices, tmpDir } from './helpers'
 
 /** Shape written by the pre-upgrade app (src/main/services/db.ts in git history). */
@@ -175,7 +176,7 @@ describe('SQLite persistence', () => {
     expect(
       reopened.get<{ value: string }>("SELECT value FROM settings WHERE key = 'k'")!.value
     ).toBe('"v2"')
-    expect(reopened.schemaVersion).toBe(1)
+    expect(reopened.schemaVersion).toBe(MIGRATIONS.length)
     // Recovery from a missing primary file.
     reopened.close()
     fs.rmSync(file)
@@ -242,5 +243,32 @@ describe('environment credential bootstrap', () => {
     expect(svc.store.secrets.get('adzuna.appId')).toBe('env-app-id')
     expect(svc.store.secrets.get('adzuna.appKey')).toBe('already-set-key')
     await svc.shutdown()
+  })
+})
+
+describe('schema upgrade', () => {
+  it('backs up a v1 database byte-for-byte before migrating and keeps its data', async () => {
+    const initSqlJs = (await import('sql.js')).default
+    const SQL = await initSqlJs()
+    const raw = new SQL.Database()
+    raw.exec(MIGRATIONS[0].sql)
+    raw.exec(
+      "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); INSERT INTO schema_version VALUES (1, 'x'); INSERT INTO settings (key, value) VALUES ('keep', '\"me\"')"
+    )
+    const dir = tmpDir()
+    const file = path.join(dir, 'pulseapply.sqlite')
+    const bytes = Buffer.from(raw.export())
+    fs.writeFileSync(file, bytes)
+    const db = await AppDb.open(file)
+    expect(db.schemaVersion).toBe(MIGRATIONS.length)
+    expect(db.get<{ value: string }>("SELECT value FROM settings WHERE key = 'keep'")!.value).toBe(
+      '"me"'
+    )
+    const backup = path.join(dir, `pulseapply.sqlite.pre-v${MIGRATIONS.length}.bak`)
+    expect(fs.readFileSync(backup).equals(bytes)).toBe(true)
+    expect(
+      db.all("SELECT name FROM pragma_table_info('jobs') WHERE name = 'elig_status'")
+    ).toHaveLength(1)
+    db.close()
   })
 })

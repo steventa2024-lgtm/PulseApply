@@ -12,26 +12,35 @@ import type { IpcChannel } from '../../src/shared/ipc'
  * validated IPC handlers. Lets the UI be exercised end-to-end where the
  * Electron binary is unavailable.
  */
+// One multiplexed EventSource: browsers allow only ~6 concurrent HTTP/1.1
+// connections per host, and one stream per subscription would starve /ipc.
 const BRIDGE = `
-window.pulse = {
-  invoke: (channel, payload) => fetch('/ipc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ channel, payload }) }).then(r => r.json()),
-  on: (channel, cb) => {
-    const es = new EventSource('/events?channel=' + encodeURIComponent(channel));
-    es.onmessage = (e) => cb(JSON.parse(e.data));
-    return () => es.close();
-  },
-  pathForFile: () => ''
-};`
+(() => {
+  const subs = new Map();
+  const es = new EventSource('/events');
+  es.onmessage = (e) => {
+    const { channel, payload } = JSON.parse(e.data);
+    for (const cb of subs.get(channel) ?? []) cb(payload);
+  };
+  window.pulse = {
+    invoke: (channel, payload) => fetch('/ipc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ channel, payload }) }).then(r => r.json()),
+    on: (channel, cb) => {
+      if (!subs.has(channel)) subs.set(channel, new Set());
+      subs.get(channel).add(cb);
+      return () => subs.get(channel).delete(cb);
+    },
+    pathForFile: () => ''
+  };
+})();`
 
 export async function startUiHarness(
   svc: Services,
   opts: { pickResume?: string } = {}
 ): Promise<{ url: string; close: () => Promise<void> }> {
   const root = path.join(__dirname, '..', '..', 'out', 'renderer')
-  const listeners = new Set<{ channel: string; res: http.ServerResponse }>()
+  const listeners = new Set<http.ServerResponse>()
   const emit = (channel: string, payload: unknown): void => {
-    for (const l of listeners)
-      if (l.channel === channel) l.res.write(`data: ${JSON.stringify(payload)}\n\n`)
+    for (const res of listeners) res.write(`data: ${JSON.stringify({ channel, payload })}\n\n`)
   }
   const handlers = createHandlers(
     svc,
@@ -68,9 +77,8 @@ export async function startUiHarness(
     }
     if (url.pathname === '/events') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
-      const l = { channel: url.searchParams.get('channel') ?? '', res }
-      listeners.add(l)
-      req.on('close', () => listeners.delete(l))
+      listeners.add(res)
+      req.on('close', () => listeners.delete(res))
       return
     }
     if (url.pathname === '/bridge.js') {
@@ -102,7 +110,7 @@ export async function startUiHarness(
     url: `http://127.0.0.1:${port}/`,
     close: () =>
       new Promise<void>((r) => {
-        for (const l of listeners) l.res.end()
+        for (const l of listeners) l.end()
         server.close(() => r())
       })
   }

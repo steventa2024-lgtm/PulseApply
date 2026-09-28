@@ -343,7 +343,7 @@ export class TelegramService {
       const searches = this.store.searches.list()
       await api.sendMessage(
         chatId,
-        `Jobs tracked: ${s.total}\nNew in 24h: ${s.newJobs}\nStrong matches: ${s.strong}\nScheduled searches: ${searches.filter((x) => x.enabled).length}/${searches.length} active`
+        `Jobs meeting your criteria: ${s.total}\nNew in 24h: ${s.newJobs}\nStrong matches: ${s.strong}\nScheduled searches: ${searches.filter((x) => x.enabled).length}/${searches.length} active`
       )
     } else if (cmd === '/pause' || cmd === '/resume') {
       for (const s of this.store.searches.list())

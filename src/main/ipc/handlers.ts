@@ -9,6 +9,7 @@ import { allCountries } from '../services/jobs/geo/regions'
 import { isPublicHttpUrl } from '../services/jobs/verification/urlSafety'
 import { checkAvailability } from '../services/jobs/verification/availability'
 import { providerById } from '../services/jobs/providers'
+import { OCCUPATION_BY_ID } from '../services/jobs/search/taxonomy'
 import { lastMigrationReport } from '../services/persistence/legacyImport'
 import { normalizeDraft } from '../services/jobs/normalization/normalize'
 
@@ -96,8 +97,37 @@ export const SearchCriteriaSchema = z.object({
   providerIds: z.array(z.string().max(50)).max(50).optional(),
   includeUnknownLocations: z.boolean().optional(),
   excludedKeywords: z.array(z.string().max(60)).max(20).optional(),
-  excludedCompanies: z.array(z.string().max(120)).max(50).optional()
+  excludedCompanies: z.array(z.string().max(120)).max(50).optional(),
+  targetOccupations: z.array(z.string().max(60)).max(20).optional(),
+  excludedOccupations: z.array(z.string().max(60)).max(30).optional(),
+  occupationMatch: z.enum(['exact', 'related']).optional(),
+  locationMode: z.enum(['strict', 'preferred']).optional(),
+  minimumMatchScore: z.number().int().min(0).max(100).optional(),
+  requiredSkills: z.array(z.string().min(1).max(60)).max(20).optional(),
+  preferredSkills: z.array(z.string().min(1).max(60)).max(30).optional()
 })
+
+const exclusionReason = z.enum([
+  'irrelevant_occupation',
+  'excluded_occupation',
+  'outside_radius',
+  'outside_country',
+  'remote_not_requested',
+  'remote_ineligible',
+  'onsite_not_requested',
+  'unknown_location',
+  'salary_below_minimum',
+  'employment_type',
+  'seniority',
+  'too_old',
+  'excluded_keyword',
+  'excluded_company',
+  'malformed',
+  'expired',
+  'work_mode',
+  'missing_required_skill',
+  'below_minimum_score'
+])
 
 const field = z.object({
   value: z.string().max(300),
@@ -264,6 +294,10 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
   'profile:delete-resume': z.object({ id }),
   'profile:export': z.undefined(),
   'profile:delete-all': z.undefined(),
+  'criteria:get': z.undefined(),
+  'criteria:save': SearchCriteriaSchema as never,
+  'jobs:counters': z.undefined(),
+  'criteria:occupations': z.undefined(),
   'search:run': SearchCriteriaSchema as never,
   'search:cancel': z.object({ runId: id }),
   'search:parse': SearchCriteriaSchema as never,
@@ -272,7 +306,21 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
   'geo:suggest': z.object({ text: z.string().max(100) }),
   'geo:countries': z.undefined(),
   'jobs:list': z.object({
-    view: z.enum(['all', 'saved', 'dismissed', 'new', 'applied']).optional(),
+    view: z
+      .enum([
+        'all',
+        'eligible',
+        'review',
+        'excluded',
+        'archive',
+        'saved',
+        'dismissed',
+        'new',
+        'applied'
+      ])
+      .optional(),
+    runId: id.optional(),
+    reason: exclusionReason.optional(),
     minScore: z.number().min(0).max(100).optional(),
     verification: z.array(verification).optional(),
     limit: z.number().int().min(1).max(2000).optional(),
@@ -354,7 +402,8 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
 type Handlers = { [C in IpcChannel]: (payload: IpcPayload<C>) => Promise<IpcResultData<C>> }
 
 function stripScore(job: ScoredJob): NormalizedJob {
-  const { match: _m, relevance: _r, geo: _g, state: _s, isNew: _n, ...base } = job
+  const { match: _m, relevance: _r, geo: _g, state: _s, isNew: _n, eligibility: _e, ...base } = job
+  void _e
   void _m
   void _r
   void _g
@@ -396,16 +445,31 @@ export function createHandlers(
         needsConfirmation: ResumeService.needsConfirmation(profile)
       }
     },
-    'profile:save': async (p) => store.candidate.save(p as CandidateProfile),
+    'profile:save': async (p) => {
+      const saved = store.candidate.save(p as CandidateProfile)
+      void svc.criteria.profileChanged()
+      return saved
+    },
     'profile:pick-resume': async () => {
       const file = await host.pickResumeFile()
-      return file ? svc.resumes.importFile(file) : null
+      if (!file) return null
+      const res = await svc.resumes.importFile(file)
+      void svc.criteria.profileChanged()
+      return res
     },
-    'profile:import-resume': ({ path }) => svc.resumes.importFile(path),
-    'profile:import-resume-data': ({ fileName, base64 }) =>
-      svc.resumes.importBuffer(fileName, Buffer.from(base64, 'base64')),
+    'profile:import-resume': async ({ path }) => {
+      const res = await svc.resumes.importFile(path)
+      void svc.criteria.profileChanged()
+      return res
+    },
+    'profile:import-resume-data': async ({ fileName, base64 }) => {
+      const res = await svc.resumes.importBuffer(fileName, Buffer.from(base64, 'base64'))
+      void svc.criteria.profileChanged()
+      return res
+    },
     'profile:set-default-resume': async ({ id }) => {
       store.candidate.setDefaultResume(id)
+      void svc.criteria.profileChanged()
       return store.candidate.resumes()
     },
     'profile:rename-resume': async ({ id, label }) => {
@@ -430,11 +494,33 @@ export function createHandlers(
       return ok
     },
 
-    'search:run': (criteria) =>
-      svc.search.run(criteria, {
-        trigger: 'manual',
-        onProgress: (p) => emit('search:progress', p)
-      }),
+    'criteria:get': async () => {
+      const ctx = await svc.criteria.context()
+      return { criteria: svc.criteria.getActive(), intent: ctx.intent, label: ctx.label }
+    },
+    'criteria:save': async (criteria) => {
+      const res = await svc.criteria.setActive(criteria)
+      jobsChanged()
+      return res
+    },
+    'jobs:counters': () => svc.criteria.counters(),
+    'criteria:occupations': async () =>
+      [...OCCUPATION_BY_ID.values()]
+        .map((o) => ({ id: o.id, label: o.label, family: o.family }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    // A manual search always runs the saved, authoritative criteria.
+    'search:run': async (criteria) => {
+      const { criteria: active } = await svc.criteria.setActive(criteria)
+      const res = await svc.search.run(
+        { ...active, providerIds: criteria.providerIds },
+        {
+          trigger: 'manual',
+          onProgress: (p) => emit('search:progress', p)
+        }
+      )
+      jobsChanged()
+      return res
+    },
     'search:cancel': async ({ runId }) => svc.search.cancel(runId),
     'search:parse': async (criteria) => {
       const p = store.candidate.get()
@@ -447,7 +533,8 @@ export function createHandlers(
     'search:last': async () => {
       const last = svc.search.lastSearch()
       if (!last) return null
-      const jobs = store.jobs.list({ ids: last.jobIds, view: 'all', limit: 2000 })
+      // Only jobs that still meet the (possibly edited) active criteria.
+      const jobs = store.jobs.list({ ids: last.jobIds, view: 'eligible', limit: 2000 })
       const order = new Map(last.jobIds.map((jid, i) => [jid, i]))
       jobs.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
       return {
@@ -462,8 +549,16 @@ export function createHandlers(
     'geo:suggest': async ({ text }) => svc.geo.suggest(text),
     'geo:countries': async () => allCountries(),
 
-    'jobs:list': async (f) =>
-      store.jobs.list({ ...f, limit: f.limit ?? 500, includeDemo: store.settings.get().demoMode }),
+    'jobs:list': async (f) => {
+      // Stored evaluations must match the active criteria before anything is listed.
+      if (store.jobs.staleEvaluationCount(svc.criteria.activeKey()) > 0)
+        await svc.criteria.recalculate()
+      return store.jobs.list({
+        ...f,
+        limit: f.limit ?? 500,
+        includeDemo: store.settings.get().demoMode
+      })
+    },
     'jobs:get': async ({ id }) => store.jobs.get(id) ?? null,
     'jobs:save': async ({ id, saved }) => {
       store.jobs.setSaved(id, saved)

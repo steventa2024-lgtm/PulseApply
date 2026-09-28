@@ -8,6 +8,8 @@ import type {
   CandidateProfile,
   DashboardStats,
   EmployerRecord,
+  ExclusionReason,
+  JobCounters,
   ProviderInfo,
   ResumeParseResult,
   ResumeRecord,
@@ -43,6 +45,11 @@ export interface IpcContract {
   'profile:export': [void, string | null]
   'profile:delete-all': [void, boolean]
 
+  'criteria:get': [void, { criteria: SearchCriteria; intent: SearchIntent; label: string }]
+  'criteria:save': [SearchCriteria, { criteria: SearchCriteria; counters: JobCounters }]
+  'jobs:counters': [void, JobCounters]
+  'criteria:occupations': [void, { id: string; label: string; family: string }[]]
+
   'search:run': [SearchCriteria, SearchRunResult]
   'search:cancel': [{ runId: string }, boolean]
   'search:parse': [SearchCriteria, SearchIntent]
@@ -62,7 +69,18 @@ export interface IpcContract {
 
   'jobs:list': [
     {
-      view?: 'all' | 'saved' | 'dismissed' | 'new' | 'applied'
+      view?:
+        | 'all'
+        | 'eligible'
+        | 'review'
+        | 'excluded'
+        | 'archive'
+        | 'saved'
+        | 'dismissed'
+        | 'new'
+        | 'applied'
+      runId?: string
+      reason?: ExclusionReason
       minScore?: number
       verification?: VerificationStatus[]
       limit?: number
@@ -203,6 +221,10 @@ export const INVOKE_CHANNELS: IpcChannel[] = [
   'profile:delete-resume',
   'profile:export',
   'profile:delete-all',
+  'criteria:get',
+  'criteria:save',
+  'jobs:counters',
+  'criteria:occupations',
   'search:run',
   'search:cancel',
   'search:parse',

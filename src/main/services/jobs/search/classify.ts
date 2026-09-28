@@ -212,7 +212,9 @@ export function computeRelevance(
         basis: `Related occupation (${job.occupation!.label})`
       }
     }
-    if (titleFrac >= 0.5) {
+    // Title terms only help when the job's own occupation is unknown: a "Warehouse
+    // Software Engineer" is a software job even though it contains "warehouse".
+    if (!jobOcc && titleFrac >= 0.5) {
       return { score: 0.5 + 0.2 * titleFrac, basis: 'Search terms appear in the job title' }
     }
     return {

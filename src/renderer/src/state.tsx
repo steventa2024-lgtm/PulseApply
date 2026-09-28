@@ -1,12 +1,20 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import type { ScoredJob, SearchCriteria } from '../../shared/types'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { JobCounters, ScoredJob } from '../../shared/types'
+import { call, useEvent } from './lib/api'
 import { Ctx, type LastSearch, type Toast, type View } from './lib/appContext'
 
 export function AppProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [view, setView] = useState<View>('dashboard')
   const [lastSearch, setLastSearch] = useState<LastSearch | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
-  const [draftCriteria, setDraftCriteria] = useState<SearchCriteria | null>(null)
+  const [counters, setCounters] = useState<JobCounters | null>(null)
+  const refreshCounters = useCallback(() => {
+    call('jobs:counters')
+      .then(setCounters)
+      .catch(() => undefined)
+  }, [])
+  useEffect(() => refreshCounters(), [refreshCounters])
+  useEvent('jobs:changed', refreshCounters)
 
   const dismissToast = useCallback(
     (id: number) => setToasts((t) => t.filter((x) => x.id !== id)),
@@ -36,10 +44,10 @@ export function AppProvider({ children }: { children: ReactNode }): React.JSX.El
       toasts,
       toast,
       dismissToast,
-      draftCriteria,
-      setDraftCriteria
+      counters,
+      refreshCounters
     }),
-    [view, lastSearch, updateJob, toasts, toast, dismissToast, draftCriteria]
+    [view, lastSearch, updateJob, toasts, toast, dismissToast, counters, refreshCounters]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

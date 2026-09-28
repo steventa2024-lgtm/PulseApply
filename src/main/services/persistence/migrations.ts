@@ -261,5 +261,45 @@ export const MIGRATIONS: Migration[] = [
         created_at TEXT NOT NULL
       );
     `
+  },
+  {
+    version: 2,
+    name: 'criteria-based eligibility, run membership, resume documents',
+    sql: `
+      ALTER TABLE jobs ADD COLUMN elig_status TEXT;
+      ALTER TABLE jobs ADD COLUMN elig_reason TEXT;
+      ALTER TABLE jobs ADD COLUMN elig TEXT;
+      ALTER TABLE jobs ADD COLUMN elig_key TEXT;
+      ALTER TABLE jobs ADD COLUMN last_run_id TEXT;
+      CREATE INDEX idx_jobs_elig ON jobs(elig_status, match_score);
+
+      CREATE TABLE search_run_jobs (
+        run_id TEXT NOT NULL,
+        job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        is_new INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (run_id, job_id)
+      );
+      CREATE INDEX idx_run_jobs_job ON search_run_jobs(job_id);
+
+      CREATE TABLE resume_documents (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        data TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        is_master INTEGER NOT NULL DEFAULT 0,
+        resume_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE resume_document_versions (
+        document_id TEXT NOT NULL REFERENCES resume_documents(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        data TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (document_id, version)
+      );
+    `
   }
 ]

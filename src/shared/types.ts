@@ -172,9 +172,30 @@ export interface NormalizedJob {
 // Search
 // ---------------------------------------------------------------------------
 
+/**
+ * How the search location is applied.
+ * - `strict` (default): jobs outside the radius/country are removed before scoring.
+ * - `preferred`: jobs anywhere are kept, but nearby jobs rank higher; the job card
+ *   says clearly when a job is outside the preferred area.
+ */
+export type LocationMode = 'strict' | 'preferred'
+
+/**
+ * The single authoritative description of what the user is looking for. The
+ * same object drives manual searches, the Results page, saved/scheduled
+ * searches, Telegram notifications, the application queue and dashboard
+ * counters.
+ */
 export interface SearchCriteria {
   query: string
+  /** Taxonomy occupation ids chosen explicitly (in addition to those read from `query`). */
+  targetOccupations?: string[]
+  /** Taxonomy occupation ids that must never appear. */
+  excludedOccupations?: string[]
+  /** 'related' (default) also accepts closely related occupations of the same family. */
+  occupationMatch?: 'exact' | 'related'
   location?: string
+  locationMode?: LocationMode
   radius?: number
   radiusUnit?: DistanceUnit
   country?: string
@@ -186,9 +207,16 @@ export interface SearchCriteria {
   salaryPeriod?: SalaryPeriod
   postedWithinDays?: number
   providerIds?: string[]
+  /** @deprecated Jobs whose location cannot be verified always go to a separate review group. */
   includeUnknownLocations?: boolean
   excludedKeywords?: string[]
   excludedCompanies?: string[]
+  /** Jobs scoring below this are listed as "below your minimum match score". */
+  minimumMatchScore?: number
+  /** Every term must appear in the job title or description. */
+  requiredSkills?: string[]
+  /** Terms that raise the match score when present. */
+  preferredSkills?: string[]
 }
 
 export interface SearchIntent {
@@ -234,6 +262,9 @@ export type ExclusionReason =
   | 'excluded_company'
   | 'malformed'
   | 'expired'
+  | 'work_mode'
+  | 'missing_required_skill'
+  | 'below_minimum_score'
 
 export interface ProviderRunReport {
   providerId: string
@@ -255,9 +286,31 @@ export interface SearchStats {
   duplicatesMerged: number
   returned: number
   newJobs: number
+  /** Jobs whose location could not be verified (not counted in `returned`). */
+  review?: number
+  belowMinimumScore?: number
+}
+
+export type EligibilityStatus = 'eligible' | 'review' | 'excluded'
+
+/** Result of the hard filters, evaluated before any scoring. */
+export interface JobEligibility {
+  status: EligibilityStatus
+  eligible: boolean
+  exclusionReasons: ExclusionReason[]
+  /** Human-readable reason for the first exclusion / review. */
+  summary: string
+  locationStatus: 'match' | 'outside' | 'unverified' | 'not_applied' | 'outside_preferred'
+  occupationStatus: 'match' | 'related' | 'unrelated' | 'excluded' | 'unknown'
+  workModeStatus: 'match' | 'mismatch' | 'unknown'
+  /** Facts the posting did not state (location, occupation, employment type, salary…). */
+  missingData: string[]
+  /** Hash of the criteria this was evaluated against. */
+  criteriaKey: string
 }
 
 export interface ScoredJob extends NormalizedJob {
+  eligibility?: JobEligibility
   match?: MatchResult
   geo: { eligibility: GeoEligibility; distance?: number; unit?: DistanceUnit; note?: string }
   relevance: { score: number; basis: string }
@@ -276,7 +329,10 @@ export interface SearchRunResult {
   runId: string
   intent: SearchIntent
   stats: SearchStats
+  /** Eligible jobs only (after hard filters and the minimum score). */
   jobs: ScoredJob[]
+  /** Jobs kept aside because their location could not be verified. */
+  review: ScoredJob[]
   cancelled: boolean
   startedAt: string
   finishedAt: string
@@ -656,6 +712,7 @@ export interface SemanticStatus {
 }
 
 export interface DashboardStats {
+  counters: JobCounters
   totalJobs: number
   newJobs: number
   verifiedJobs: number
@@ -669,6 +726,35 @@ export interface DashboardStats {
   providersNeedingCredentials: number
   scheduledSearches: number
   telegram: TelegramState
+}
+
+/** Result-set counters, always computed from the database against the active criteria. */
+export interface JobCounters {
+  criteriaKey: string
+  criteriaLabel: string
+  lastRun?: {
+    runId: string
+    finishedAt?: string
+    fetched: number
+    newJobs: number
+    status: string
+  }
+  historical: number
+  eligible: number
+  eligibleNew: number
+  review: number
+  excluded: number
+  excludedBy: {
+    location: number
+    occupation: number
+    workMode: number
+    belowScore: number
+    expired: number
+    other: number
+  }
+  unverified: number
+  saved: number
+  dismissed: number
 }
 
 export interface MigrationReport {

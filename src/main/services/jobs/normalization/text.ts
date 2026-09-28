@@ -52,12 +52,11 @@ export function decodeEntities(s: string): string {
   })
 }
 
-export function htmlToText(html: string | undefined, maxLength = 20_000): string {
-  if (!html) return ''
-  let s = html
-  // Some providers double-escape their HTML (Greenhouse `content`).
-  if (/&lt;\/?[a-z]/i.test(s) && !/<\/?[a-z][^>]*>/i.test(s)) s = decodeEntities(s)
-  s = s
+const TAG = /<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\/?>/i
+const ESCAPED_TAG = /&(?:amp;)*lt;\/?[a-z][a-z0-9-]*(?:\s[^&]*?)?\/?&(?:amp;)*gt;/i
+
+function stripTags(html: string): string {
+  return html
     .replace(/<(script|style|noscript|iframe|object|embed|svg|template)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<\s*br\s*\/?>/gi, '\n')
@@ -66,9 +65,28 @@ export function htmlToText(html: string | undefined, maxLength = 20_000): string
       /<\s*\/(p|div|h[1-6]|ul|ol|li|tr|section|article|header|footer|blockquote)\s*>/gi,
       '\n'
     )
-    .replace(/<\s*(p|div|h[1-6]|ul|ol|tr|section|article|blockquote)[^>]*>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-  s = decodeEntities(s)
+    .replace(/<\s*(p|div|h[1-6]|ul|ol|tr|section|article|blockquote)(\s[^>]*)?>/gi, '\n')
+    .replace(/<\/?[a-z][a-z0-9-]*(?:\s[^<>]*)?\/?>/gi, ' ')
+}
+
+/** True when text still contains markup (raw or entity-escaped tags). */
+export function looksLikeHtml(text: string): boolean {
+  return TAG.test(text) || ESCAPED_TAG.test(text)
+}
+
+/**
+ * Converts provider HTML to plain text. Handles HTML that was escaped once or
+ * several times (Greenhouse `content`, some RSS feeds) and HTML nested inside
+ * escaped HTML, so no tags or entities ever reach the UI.
+ */
+export function htmlToText(html: string | undefined, maxLength = 20_000): string {
+  if (!html) return ''
+  let s = html
+  for (let pass = 0; pass < 4; pass++) {
+    s = decodeEntities(stripTags(s))
+    if (!looksLikeHtml(s)) break
+  }
+  s = s
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t\f\v]+/g, ' ')
     .replace(/ *\n */g, '\n')

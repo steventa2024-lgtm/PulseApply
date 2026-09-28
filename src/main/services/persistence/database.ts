@@ -56,6 +56,15 @@ export class AppDb {
       'CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)'
     )
     const current = this.schemaVersion
+    const pending = MIGRATIONS.filter((m) => m.version > current)
+    // Before upgrading an existing database file, keep a byte-for-byte copy of it.
+    if (pending.length && current > 0 && this.filePath && fs.existsSync(this.filePath)) {
+      const backup = `${this.filePath}.pre-v${pending[pending.length - 1].version}.bak`
+      if (!fs.existsSync(backup)) {
+        fs.copyFileSync(this.filePath, backup)
+        log.info('db', `Backed up database before migration to ${path.basename(backup)}`)
+      }
+    }
     for (const m of MIGRATIONS) {
       if (m.version <= current) continue
       this.transaction(() => {

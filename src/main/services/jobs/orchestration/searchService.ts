@@ -14,18 +14,18 @@ import type {
 import type { Store } from '../../persistence/store'
 import { ProvidersRepo } from '../../persistence/providersRepo'
 import type { GeoService } from '../geo/geoService'
-import { evaluateGeo, toKm } from '../geo/geoService'
+import { toKm } from '../geo/geoService'
 import type { HttpClient } from '../adapters/http'
 import { CancelledError, RateLimitedError } from '../adapters/http'
 import type { JobProvider, ProviderQuery, RawRecord } from '../providers/types'
 import { missingCredentials } from '../providers/types'
 import { buildIntent } from '../search/intent'
-import { computeRelevance, RELEVANCE_THRESHOLD, normalizeTitle } from '../search/classify'
+import { normalizeTitle } from '../search/classify'
 import { OCCUPATION_BY_ID } from '../search/taxonomy'
 import { normalizeDraft } from '../normalization/normalize'
-import { annualize } from '../normalization/salary'
-import { dedupeJobs, normalizeCompany } from '../deduplication/dedupe'
-import type { MatchingService } from '../../matching/matchingService'
+import { dedupeJobs } from '../deduplication/dedupe'
+import type { CriteriaService, EvaluatedJob } from '../../eligibility/criteriaService'
+import { criteriaKey } from '../../eligibility/criteria'
 import { manualSearchUrl } from '../providers/restricted'
 import { log } from '../../logger'
 
@@ -49,8 +49,6 @@ function stableHash(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 24)
 }
 
-const SENIOR_LEVELS = new Set(['senior', 'lead', 'manager', 'director', 'executive'])
-
 /**
  * Runs a job search across all eligible providers.
  *
@@ -68,7 +66,7 @@ export class SearchService {
       geo: GeoService
       http: HttpClient
       providers: JobProvider[]
-      matching: MatchingService
+      criteria: CriteriaService
     }
   ) {
     for (const p of deps.providers)
@@ -177,7 +175,11 @@ export class SearchService {
 
   /** Identical concurrent searches share one run (duplicate request suppression). */
   run(criteria: SearchCriteria, opts: SearchOptions): Promise<SearchRunResult> {
-    const key = stableHash({ criteria, searchId: opts.searchId ?? null })
+    const key = stableHash({
+      criteria: criteriaKey(criteria),
+      p: criteria.providerIds ?? [],
+      searchId: opts.searchId ?? null
+    })
     const existing = this.inflight.get(key)
     if (existing) return existing
     const p = this.execute(criteria, opts).finally(() => this.inflight.delete(key))
@@ -210,35 +212,13 @@ export class SearchService {
       (stats.excluded[r] = (stats.excluded[r] ?? 0) + 1)
 
     try {
-      // ---- 1. interpret -----------------------------------------------------
+      // ---- 1. interpret + 2. resolve location --------------------------------
       emit({ phase: 'interpreting', message: 'Interpreting your search…' })
-      const profile = store.candidate.get()
-      const intent: SearchIntent = buildIntent(criteria, {
-        location: profile.preferences.location || profile.location.value || undefined,
-        radius: profile.preferences.radius,
-        radiusUnit: profile.preferences.radiusUnit
-      })
-
-      // ---- 2. location -------------------------------------------------------
-      if (intent.locationText) {
-        emit({ phase: 'resolving_location', message: `Locating “${intent.locationText}”…` })
-        const place = await geo.resolveSearchLocation(intent.locationText, signal)
-        if (place.precision === 'none') {
-          intent.notes.push(
-            `Could not recognise the location “${intent.locationText}”. Results cannot be filtered by distance.`
-          )
-        } else intent.location = place
-      }
-      const country = criteria.country ?? intent.location?.country
-      if (
-        criteria.country &&
-        intent.location?.country &&
-        criteria.country !== intent.location.country
-      ) {
-        intent.notes.push(
-          `Location “${intent.location.label}” is not in the selected country ${criteria.country}; the location wins.`
-        )
-      }
+      if (criteria.location)
+        emit({ phase: 'resolving_location', message: `Locating “${criteria.location}”…` })
+      const runCtx = await this.deps.criteria.context(criteria, signal)
+      const intent: SearchIntent = runCtx.intent
+      const country = runCtx.criteria.country ?? intent.location?.country
 
       const query: ProviderQuery = {
         intent,
@@ -352,146 +332,91 @@ export class SearchService {
       }
       stats.normalized = normalized.length
 
-      // ---- 5. filter ------------------------------------------------------------
-      const minAnnual = intent.minimumSalary
-        ? annualize(intent.minimumSalary, intent.salaryPeriod)
-        : undefined
-      const excludedCompanies = intent.excludedCompanies.map(normalizeCompany)
-      const kept: (NormalizedJob & { geo: ScoredJob['geo']; relevance: ScoredJob['relevance'] })[] =
-        []
-      const cutoff = intent.postedWithinDays
-        ? Date.now() - intent.postedWithinDays * 86400_000
-        : undefined
-      for (const job of normalized) {
-        if (job.verificationStatus === 'EXPIRED') {
-          exclude('expired')
-          continue
-        }
-        const rel = computeRelevance(job, intent)
-        if (
-          rel.score === 0 &&
-          job.occupation &&
-          intent.excludedOccupations.includes(job.occupation.id)
-        ) {
-          exclude('excluded_occupation')
-          continue
-        }
-        if (rel.score < RELEVANCE_THRESHOLD) {
-          exclude('irrelevant_occupation')
-          continue
-        }
-        if (
-          intent.excludedKeywords.some(
-            (k) => k && job.title.toLowerCase().includes(k.toLowerCase())
-          )
-        ) {
-          exclude('excluded_keyword')
-          continue
-        }
-        if (excludedCompanies.includes(normalizeCompany(job.company))) {
-          exclude('excluded_company')
-          continue
-        }
-        const g = evaluateGeo(job, intent)
-        if (!g.include) {
-          exclude(g.exclusion ?? 'unknown_location')
-          continue
-        }
-        if (
-          intent.employmentTypes.length &&
-          job.employmentTypes.length &&
-          !job.employmentTypes.some((t) => intent.employmentTypes.includes(t))
-        ) {
-          exclude('employment_type')
-          continue
-        }
-        if (
-          intent.seniority.length &&
-          job.seniority &&
-          intent.seniority.every((s) => s === 'entry' || s === 'junior') &&
-          SENIOR_LEVELS.has(job.seniority)
-        ) {
-          exclude('seniority')
-          continue
-        }
-        if (
-          minAnnual &&
-          job.salary &&
-          (job.salary.max ?? job.salary.min) &&
-          (!intent.currency || !job.salary.currency || job.salary.currency === intent.currency)
-        ) {
-          const top = annualize((job.salary.max ?? job.salary.min)!, job.salary.period)
-          if (top !== undefined && top < minAnnual) {
-            exclude('salary_below_minimum')
-            continue
-          }
-        }
-        if (cutoff && job.postedAt && Date.parse(job.postedAt) < cutoff) {
-          exclude('too_old')
-          continue
-        }
-        kept.push({
-          ...job,
-          geo: { eligibility: g.eligibility, distance: g.distance, unit: g.unit, note: g.note },
-          relevance: rel
-        })
-      }
-
-      // ---- 6. dedupe --------------------------------------------------------------
+      // ---- 5. dedupe (before any filtering, so merged sources are complete) -------
       emit({ phase: 'deduplicating', message: 'Removing duplicates…' })
-      const geoById = new Map(kept.map((k) => [k.id, { geo: k.geo, relevance: k.relevance }]))
-      const { jobs: unique, merged } = dedupeJobs(kept)
+      const { jobs: unique, merged } = dedupeJobs(normalized)
       stats.duplicatesMerged = merged
       // Keep ids stable across runs: reuse the id already stored for any of the job's source records.
-      const withIds = unique.map((j) => {
-        // The merged representative is always one of the kept records, so its id is in the map.
-        const ctx = geoById.get(j.id) ?? {
-          geo: { eligibility: 'unknown' as const },
-          relevance: { score: RELEVANCE_THRESHOLD, basis: '' }
+      const withIds: NormalizedJob[] = unique.map((j) => {
+        for (const src of j.sources) {
+          const existing = store.jobs.findJobIdBySourceRecord(src.providerId, src.sourceJobId)
+          if (existing) return { ...j, id: existing }
         }
-        let id = j.id
-        for (const s of j.sources) {
-          const existing = store.jobs.findJobIdBySourceRecord(s.providerId, s.sourceJobId)
-          if (existing) {
-            id = existing
-            break
-          }
-        }
-        return { ...j, id, geo: ctx.geo, relevance: ctx.relevance }
+        return j
       })
 
-      // ---- 7. match ------------------------------------------------------------------
-      emit({ phase: 'matching', message: 'Matching your qualifications…' })
-      const matches = await this.deps.matching.scoreAll(withIds, signal)
+      // ---- 6. hard filters, then 7. score eligible jobs only ----------------------
+      emit({ phase: 'matching', message: 'Checking occupation, location and work mode…' })
+      const runEvals = await this.deps.criteria.evaluate(withIds, runCtx, signal)
+      // Stored columns always reflect the ACTIVE criteria (a scheduled search may use different ones).
+      const activeKey = this.deps.criteria.activeKey()
+      const storedEvals: EvaluatedJob[] =
+        runCtx.key === activeKey
+          ? runEvals
+          : await this.deps.criteria.evaluate(
+              withIds,
+              await this.deps.criteria.context(undefined, signal),
+              signal
+            )
+      for (const e of runEvals) {
+        const r = e.eligibility.exclusionReasons[0]
+        if (r) exclude(r)
+      }
+      stats.review = runEvals.filter((e) => e.eligibility.status === 'review').length
+      stats.belowMinimumScore = runEvals.filter((e) =>
+        e.eligibility.exclusionReasons.includes('below_minimum_score')
+      ).length
 
-      // ---- 8. persist --------------------------------------------------------------
+      // ---- 8. persist ------------------------------------------------------------------
       emit({ phase: 'saving', message: 'Saving results…' })
-      const scored: ScoredJob[] = withIds.map((j) => ({
-        ...j,
-        match: matches.get(j.id) ?? undefined,
+      const toStore: ScoredJob[] = storedEvals.map((e) => ({
+        ...e.job,
+        match: e.match,
+        geo: e.geo,
+        relevance: e.relevance,
+        eligibility: e.eligibility,
         state: { saved: false, dismissed: false }
       }))
-      const { inserted } = store.jobs.upsertMany(scored)
+      const { inserted } = store.jobs.upsertMany(toStore)
       stats.newJobs = inserted.length
       const insertedSet = new Set(inserted)
-      const persisted = store.jobs
-        .list({ ids: scored.map((s) => s.id), view: 'all', limit: 2000, includeDemo: true })
-        .concat(
-          store.jobs.list({
-            ids: scored.map((s) => s.id),
-            view: 'dismissed',
-            limit: 2000,
-            includeDemo: true
-          })
-        )
-      const byId = new Map(persisted.map((p) => [p.id, p]))
-      const final = scored
-        .map((s) => ({ ...(byId.get(s.id) ?? s), isNew: insertedSet.has(s.id) }))
-        .sort(
-          (a, b) =>
-            (b.match?.score ?? -1) - (a.match?.score ?? -1) || b.relevance.score - a.relevance.score
-        )
-      stats.returned = final.filter((f) => !f.state.dismissed).length
+      store.jobs.recordRun(
+        runId,
+        toStore.map((j) => j.id),
+        insertedSet
+      )
+      const byId = new Map(
+        store.jobs
+          .list({ ids: toStore.map((j) => j.id), view: 'archive', limit: 5000, includeDemo: true })
+          .map((p) => [p.id, p])
+      )
+      const present = (e: EvaluatedJob): ScoredJob => ({
+        ...(byId.get(e.id) ?? {
+          ...e.job,
+          state: { saved: false, dismissed: false },
+          geo: e.geo,
+          relevance: e.relevance
+        }),
+        // Present the job as evaluated for THIS run's criteria.
+        eligibility: e.eligibility,
+        match: e.match,
+        geo: e.geo,
+        relevance: e.relevance,
+        isNew: insertedSet.has(e.id)
+      })
+      const byScore = (a: ScoredJob, b: ScoredJob): number =>
+        (b.match?.score ?? -1) - (a.match?.score ?? -1) || b.relevance.score - a.relevance.score
+      const final = runEvals
+        .filter((e) => e.eligibility.status === 'eligible')
+        .map(present)
+        .filter((j) => !j.state.dismissed)
+        .sort(byScore)
+      const review = runEvals
+        .filter((e) => e.eligibility.status === 'review')
+        .map(present)
+        .filter((j) => !j.state.dismissed)
+        .sort(byScore)
+      stats.returned = final.length
 
       for (const o of outcomes) {
         if (o.report.status === 'ok' || o.report.status === 'cached')
@@ -505,6 +430,7 @@ export class SearchService {
           criteria,
           intent,
           stats,
+          criteriaKey: runCtx.key,
           jobIds: final.map((f) => f.id),
           startedAt,
           finishedAt
@@ -514,7 +440,7 @@ export class SearchService {
         phase: 'done',
         message: `Found ${stats.returned} matching job${stats.returned === 1 ? '' : 's'} (${stats.newJobs} new).`
       })
-      return { runId, intent, stats, jobs: final, cancelled: false, startedAt, finishedAt }
+      return { runId, intent, stats, jobs: final, review, cancelled: false, startedAt, finishedAt }
     } catch (err) {
       const cancelled = err instanceof CancelledError || signal.aborted
       store.searches.finishRun(
@@ -533,6 +459,7 @@ export class SearchService {
           intent: buildIntent(criteria),
           stats,
           jobs: [],
+          review: [],
           cancelled: true,
           startedAt,
           finishedAt: new Date().toISOString()

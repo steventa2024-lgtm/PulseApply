@@ -12,6 +12,7 @@ import { SearchService } from '../services/jobs/orchestration/searchService'
 import { EmployerService } from '../services/jobs/discovery/employers'
 import { EmbeddingService } from '../services/matching/embeddings'
 import { MatchingService } from '../services/matching/matchingService'
+import { CriteriaService } from '../services/eligibility/criteriaService'
 import { ResumeService } from '../services/resume/resumeService'
 import { BrowserManager, type BrowserOptions } from '../services/applications/browserManager'
 import { ApplicationManager } from '../services/applications/applicationManager'
@@ -20,6 +21,7 @@ import { TelegramService } from '../services/telegram/telegramService'
 import type { TelegramApi } from '../services/telegram/api'
 import { Scheduler } from '../services/scheduler/scheduler'
 import { log } from '../services/logger'
+import { htmlToText, looksLikeHtml } from '../services/jobs/normalization/text'
 
 export type EmitFn = (channel: string, payload: unknown) => void
 
@@ -47,6 +49,7 @@ export interface Services {
   search: SearchService
   employers: EmployerService
   matching: MatchingService
+  criteria: CriteriaService
   resumes: ResumeService
   browser: BrowserManager
   applications: ApplicationManager
@@ -66,6 +69,9 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
     log.info('startup', `Legacy import: ${JSON.stringify(migration.imported)}`)
 
   bootstrapSecretsFromEnv(store, process.env)
+  const repaired = store.jobs.repairDescriptions(htmlToText, looksLikeHtml)
+  if (repaired)
+    log.info('startup', `Converted ${repaired} stored job description(s) from HTML to text`)
   const http = new HttpClient({
     userAgent: `PulseApply/${opts.appVersion} (desktop job-search assistant)`,
     fetchImpl: opts.fetchImpl
@@ -75,12 +81,18 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
   const geo = new GeoService(gazetteer, store.db, http, () => store.settings.get().onlineGeocoding)
   const embeddings = new EmbeddingService(store.db, http, () => store.settings.get().ollama)
   const matching = new MatchingService(store, geo, embeddings)
+  const criteria = new CriteriaService({
+    store,
+    geo,
+    matching,
+    onChanged: () => opts.emit('jobs:changed', null)
+  })
   const search = new SearchService({
     store,
     geo,
     http,
     providers: opts.providers ?? ALL_PROVIDERS,
-    matching
+    criteria
   })
   const employers = new EmployerService(store, http)
   const resumesDir = path.join(opts.userDataDir, 'resumes')
@@ -126,6 +138,7 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
     search,
     employers,
     matching,
+    criteria,
     resumes,
     browser,
     applications,
@@ -141,9 +154,11 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
       const settings = store.settings.get()
       const since = new Date(Date.now() - 24 * 3600_000).toISOString()
       const s = store.jobs.stats(since, settings.matching.strongThreshold)
+      const counters = await criteria.counters()
       const counts = store.applications.counts()
       const infos = search.providerInfos()
       return {
+        counters,
         totalJobs: s.total,
         newJobs: s.newJobs,
         verifiedJobs: s.verified,

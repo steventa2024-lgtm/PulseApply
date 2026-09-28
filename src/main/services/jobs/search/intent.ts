@@ -233,7 +233,12 @@ export function buildIntent(
 ): SearchIntent {
   const parsed = parseQuery(criteria.query ?? '')
   const notes: string[] = [...parsed.notes]
-  const occupations = classifyQuery(parsed.keywords || criteria.query || '')
+  const occupations = [
+    ...new Set([
+      ...classifyQuery(parsed.keywords || criteria.query || ''),
+      ...(criteria.targetOccupations ?? []).filter((o) => OCCUPATION_BY_ID.has(o))
+    ])
+  ]
   const synonyms = new Set<string>()
   for (const id of occupations) {
     for (const t of OCCUPATION_BY_ID.get(id)?.titles.slice(0, 6) ?? []) {
@@ -263,9 +268,10 @@ export function buildIntent(
   }
   const radius =
     criteria.radius ?? parsed.radius ?? (locationText ? (defaults.radius ?? 25) : undefined)
-  const excludedOcc = [...(criteria.excludedKeywords ?? []), ...parsed.excluded].flatMap((e) =>
-    classifyQuery(e)
-  )
+  const excludedOcc = [
+    ...[...(criteria.excludedKeywords ?? []), ...parsed.excluded].flatMap((e) => classifyQuery(e)),
+    ...(criteria.excludedOccupations ?? []).filter((o) => OCCUPATION_BY_ID.has(o))
+  ]
   return {
     rawQuery: criteria.query ?? '',
     keywords: parsed.keywords ? [parsed.keywords] : [],

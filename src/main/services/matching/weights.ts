@@ -14,6 +14,8 @@ export const DEFAULT_WEIGHTS: Record<string, number> = {
   workMode: 4,
   salary: 3,
   employmentType: 3,
+  /** Only used when the search lists preferred skills. */
+  preferredSkills: 6,
   /** Only used when Ollama embeddings are active. */
   semantic: 10
 }
@@ -29,6 +31,7 @@ export const CRITERION_LABELS: Record<string, string> = {
   workMode: 'Work-mode preference',
   salary: 'Salary preference',
   employmentType: 'Employment type',
+  preferredSkills: 'Preferred skills (your criteria)',
   semantic: 'Semantic similarity (local embeddings)'
 }
 
