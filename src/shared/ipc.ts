@@ -23,6 +23,32 @@ import type {
   TelegramStatus,
   VerificationStatus
 } from './types'
+import type {
+  ResumeDocument,
+  ResumeDocumentSummary,
+  ResumeSuggestion,
+  ResumeVersionInfo
+} from './resume'
+
+/** Answers from the guided "Create new resume" flow. */
+export interface ResumeQuestionnairePayload {
+  contact: ResumeDocument['contact']
+  targetRole: string
+  experience: {
+    title: string
+    company: string
+    location?: string
+    startDate?: string
+    endDate?: string
+    current: boolean
+    duties: string
+  }[]
+  education: { institution: string; degree?: string; field?: string; graduationDate?: string }[]
+  skills: string[]
+  certifications: { name: string; issuer?: string; date?: string }[]
+  template: ResumeDocument['template']
+  pageSize: ResumeDocument['pageSize']
+}
 
 /** Every renderer -> main request: channel -> [payload, result]. */
 export interface IpcContract {
@@ -178,6 +204,30 @@ export interface IpcContract {
   'telegram:test': [void, boolean]
   'telegram:clear-webhook': [void, TelegramStatus]
 
+  'resume:list': [void, ResumeDocumentSummary[]]
+  'resume:get': [{ id: string }, ResumeDocument]
+  'resume:save': [{ doc: ResumeDocument; note?: string }, ResumeDocument]
+  'resume:delete': [{ id: string }, ResumeDocumentSummary[]]
+  'resume:versions': [{ id: string }, ResumeVersionInfo[]]
+  'resume:version': [{ id: string; version: number }, ResumeDocument]
+  'resume:import': [{ resumeId?: string }, ResumeDocument]
+  'resume:create': [ResumeQuestionnairePayload, ResumeDocument]
+  'resume:role-skills': [{ role: string }, string[]]
+  'resume:analyze': [
+    { doc: ResumeDocument; targetRole?: string; jobId?: string; useAi?: boolean },
+    { suggestions: ResumeSuggestion[]; aiDetail: string }
+  ]
+  'resume:apply': [
+    { doc: ResumeDocument; suggestion: ResumeSuggestion; edited?: string },
+    ResumeDocument
+  ]
+  'resume:export-pdf': [
+    { doc: ResumeDocument },
+    { path: string; pages: number; bytes: number } | null
+  ]
+  'resume:open-pdf': [{ path: string; reveal?: boolean }, boolean]
+  'resume:set-master': [{ id: string }, { doc: ResumeDocument; resume: ResumeRecord } | null]
+
   'matching:status': [void, SemanticStatus]
   'demo:seed': [void, ScoredJob[]]
 }
@@ -272,6 +322,20 @@ export const INVOKE_CHANNELS: IpcChannel[] = [
   'telegram:revoke',
   'telegram:test',
   'telegram:clear-webhook',
+  'resume:list',
+  'resume:get',
+  'resume:save',
+  'resume:delete',
+  'resume:versions',
+  'resume:version',
+  'resume:import',
+  'resume:create',
+  'resume:role-skills',
+  'resume:analyze',
+  'resume:apply',
+  'resume:export-pdf',
+  'resume:open-pdf',
+  'resume:set-master',
   'matching:status',
   'demo:seed'
 ]

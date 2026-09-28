@@ -4,6 +4,7 @@ import {
   Bell,
   Briefcase,
   Database,
+  FilePen,
   FileText,
   LayoutDashboard,
   Layers,
@@ -25,6 +26,7 @@ import Applications from './views/Applications'
 import Automation from './views/Automation'
 import Sources from './views/Sources'
 import Profile from './views/Profile'
+import ResumeHelper from './views/resume/ResumeHelper'
 import Settings from './views/Settings'
 
 const NAV: { id: View; label: string; icon: typeof Layers }[] = [
@@ -34,6 +36,7 @@ const NAV: { id: View; label: string; icon: typeof Layers }[] = [
   { id: 'applications', label: 'Applications', icon: Briefcase },
   { id: 'automation', label: 'Automation', icon: Bell },
   { id: 'sources', label: 'Sources', icon: Database },
+  { id: 'resume', label: 'Resume Helper', icon: FilePen },
   { id: 'profile', label: 'Profile', icon: FileText },
   { id: 'settings', label: 'Settings', icon: SettingsIcon }
 ]
@@ -147,13 +150,14 @@ function Shell(): React.JSX.Element {
         </aside>
 
         <main className="flex-1 overflow-y-auto px-8 py-7">
-          <div className="mx-auto max-w-6xl">
+          <div className={view === 'resume' ? 'w-full' : 'mx-auto max-w-6xl'}>
             {view === 'dashboard' && <Dashboard stats={stats} onRefresh={refreshStats} />}
             {view === 'search' && <Search />}
             {view === 'results' && <Results />}
             {view === 'applications' && <Applications />}
             {view === 'automation' && <Automation />}
             {view === 'sources' && <Sources />}
+            {view === 'resume' && <ResumeHelper />}
             {view === 'profile' && <Profile />}
             {view === 'settings' && <Settings info={info} onInfo={setInfo} />}
           </div>

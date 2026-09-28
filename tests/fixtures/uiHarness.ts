@@ -35,7 +35,7 @@ const BRIDGE = `
 
 export async function startUiHarness(
   svc: Services,
-  opts: { pickResume?: string } = {}
+  opts: { pickResume?: string; pdfDir?: string } = {}
 ): Promise<{ url: string; close: () => Promise<void> }> {
   const root = path.join(__dirname, '..', '..', 'out', 'renderer')
   const listeners = new Set<http.ServerResponse>()
@@ -48,6 +48,9 @@ export async function startUiHarness(
       pickResumeFile: async () => opts.pickResume ?? null,
       saveJsonFile: async () => null,
       confirm: async () => true,
+      savePdfPath: async (name) => (opts.pdfDir ? path.join(opts.pdfDir, name) : null),
+      openPath: async () => undefined,
+      showInFolder: async () => undefined,
       openExternal: async () => undefined,
       appInfo: () => ({ version: 'ui-test', isPackaged: false })
     },

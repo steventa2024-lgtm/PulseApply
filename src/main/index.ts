@@ -8,6 +8,9 @@ import { INVOKE_CHANNELS, type IpcChannel, type IpcEnvelope } from '../shared/ip
 import type { SecretCipher } from './services/persistence/secrets'
 import { isPublicHttpUrl } from './services/jobs/verification/urlSafety'
 import { log, redact } from './services/logger'
+import { ElectronPdfPrinter } from './resumePrinter'
+
+const pdfPrinter = new ElectronPdfPrinter()
 
 /**
  * Main-process entry.
@@ -124,10 +127,26 @@ function registerIpc(svc: Services): void {
         fs.writeFileSync(res.filePath, content, { mode: 0o600 })
         return res.filePath
       },
-      async confirm(message, detail) {
+      async savePdfPath(defaultName) {
+        const res = await dialog.showSaveDialog({
+          title: 'Save resume as PDF',
+          defaultPath: join(app.getPath('documents'), defaultName),
+          filters: [{ name: 'PDF', extensions: ['pdf'] }]
+        })
+        if (res.canceled || !res.filePath) return null
+        return res.filePath.toLowerCase().endsWith('.pdf') ? res.filePath : `${res.filePath}.pdf`
+      },
+      async openPath(file) {
+        const err = await shell.openPath(file)
+        if (err) throw new Error(err)
+      },
+      async showInFolder(file) {
+        shell.showItemInFolder(file)
+      },
+      async confirm(message, detail, confirmLabel = 'Delete') {
         const opts = {
           type: 'warning' as const,
-          buttons: ['Cancel', 'Delete'],
+          buttons: ['Cancel', confirmLabel],
           defaultId: 0,
           cancelId: 0,
           message,
@@ -180,7 +199,8 @@ async function bootstrap(): Promise<void> {
     resourcesDir: resourcesDir(),
     cipher: new SafeStorageCipher(),
     emit: send,
-    appVersion: app.getVersion()
+    appVersion: app.getVersion(),
+    pdfPrinter: () => pdfPrinter
   })
   registerIpc(services)
   createWindow()

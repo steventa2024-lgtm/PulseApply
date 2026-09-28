@@ -697,7 +697,8 @@ export interface TelegramStatus {
 export interface AppSettings {
   demoMode: boolean
   onlineGeocoding: boolean
-  ollama: { enabled: boolean; baseUrl: string; model: string }
+  /** `model` is the embedding model; `generateModel` (optional) rewrites resume wording locally. */
+  ollama: { enabled: boolean; baseUrl: string; model: string; generateModel?: string }
   browser: { executablePath?: string; channel?: 'chromium' | 'chrome' | 'msedge' }
   matching: { weights: Record<string, number>; strongThreshold: number }
   staleAfterDays: number

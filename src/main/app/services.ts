@@ -14,6 +14,7 @@ import { EmbeddingService } from '../services/matching/embeddings'
 import { MatchingService } from '../services/matching/matchingService'
 import { CriteriaService } from '../services/eligibility/criteriaService'
 import { ResumeService } from '../services/resume/resumeService'
+import { ResumeHelperService, type PdfPrinter } from '../services/resume/resumeHelper'
 import { BrowserManager, type BrowserOptions } from '../services/applications/browserManager'
 import { ApplicationManager } from '../services/applications/applicationManager'
 import { ACTIVE_STATES } from '../services/applications/stateMachine'
@@ -38,6 +39,8 @@ export interface ServiceOptions {
   telegramPollTimeoutSec?: number
   telegramConflictBackoffMs?: number
   allowPrivateHosts?: boolean
+  /** HTML-to-PDF renderer for the Resume Helper (Electron printToPDF in the app). */
+  pdfPrinter?: () => PdfPrinter | undefined
   /** In-memory database (tests). */
   inMemory?: boolean
 }
@@ -51,6 +54,7 @@ export interface Services {
   matching: MatchingService
   criteria: CriteriaService
   resumes: ResumeService
+  resumeHelper: ResumeHelperService
   browser: BrowserManager
   applications: ApplicationManager
   telegram: TelegramService
@@ -97,6 +101,13 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
   const employers = new EmployerService(store, http)
   const resumesDir = path.join(opts.userDataDir, 'resumes')
   const resumes = new ResumeService(store, resumesDir, gazetteer)
+  const resumeHelper = new ResumeHelperService({
+    store,
+    http,
+    resumesDir,
+    printer: opts.pdfPrinter ?? (() => undefined),
+    onProfileChanged: () => criteria.profileChanged()
+  })
   const browser = new BrowserManager(
     opts.browserOptions ??
       (() => {
@@ -140,6 +151,7 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
     matching,
     criteria,
     resumes,
+    resumeHelper,
     browser,
     applications,
     telegram,

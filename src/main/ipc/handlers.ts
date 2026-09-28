@@ -10,6 +10,8 @@ import { isPublicHttpUrl } from '../services/jobs/verification/urlSafety'
 import { checkAvailability } from '../services/jobs/verification/availability'
 import { providerById } from '../services/jobs/providers'
 import { OCCUPATION_BY_ID } from '../services/jobs/search/taxonomy'
+import { roleSkillHints } from '../services/resume/resumeAgent'
+import type { ResumeDocument } from '../../shared/resume'
 import { lastMigrationReport } from '../services/persistence/legacyImport'
 import { normalizeDraft } from '../services/jobs/normalization/normalize'
 
@@ -17,7 +19,11 @@ import { normalizeDraft } from '../services/jobs/normalization/normalize'
 export interface HostBridge {
   pickResumeFile(): Promise<string | null>
   saveJsonFile(defaultName: string, content: string): Promise<string | null>
-  confirm(message: string, detail: string): Promise<boolean>
+  /** Save dialog for a PDF; resolves to the chosen absolute path or null when cancelled. */
+  savePdfPath?(defaultName: string): Promise<string | null>
+  openPath?(file: string): Promise<void>
+  showInFolder?(file: string): Promise<void>
+  confirm(message: string, detail: string, confirmLabel?: string): Promise<boolean>
   openExternal(url: string): Promise<void>
   appInfo(): Omit<AppInfo, 'migration' | 'demoMode' | 'dbPath' | 'userDataPath' | 'secureStorage'>
 }
@@ -243,6 +249,153 @@ export const ProfileSchema = z.object({
   updatedAt: z.string().max(40)
 })
 
+const ym = z
+  .string()
+  .regex(/^\d{4}-\d{2}$/)
+  .optional()
+const line = z.string().max(600)
+const short = z.string().max(200)
+const ResumeDocSchema = z.object({
+  id,
+  name: z.string().min(1).max(120),
+  template: z.enum(['classic', 'modern', 'technical']),
+  pageSize: z.enum(['letter', 'a4']),
+  contact: z.object({
+    fullName: short,
+    email: short,
+    phone: z.string().max(60),
+    location: short,
+    linkedin: z.string().max(300),
+    website: z.string().max(300)
+  }),
+  headline: short.optional(),
+  summary: z.string().max(2000).optional(),
+  experience: z
+    .array(
+      z.object({
+        id,
+        title: short,
+        company: short,
+        location: short.optional(),
+        startDate: ym,
+        endDate: ym,
+        current: z.boolean(),
+        bullets: z.array(line).max(20)
+      })
+    )
+    .max(30),
+  education: z
+    .array(
+      z.object({
+        id,
+        institution: short,
+        degree: short.optional(),
+        field: short.optional(),
+        location: short.optional(),
+        graduationDate: z.string().max(20).optional(),
+        details: z.string().max(600).optional()
+      })
+    )
+    .max(15),
+  skills: z.array(z.string().max(80)).max(120),
+  certifications: z
+    .array(
+      z.object({
+        id,
+        name: short,
+        issuer: short.optional(),
+        date: z.string().max(20).optional()
+      })
+    )
+    .max(40),
+  projects: z
+    .array(
+      z.object({
+        id,
+        name: short,
+        link: z.string().max(300).optional(),
+        bullets: z.array(line).max(10)
+      })
+    )
+    .max(20),
+  sectionOrder: z
+    .array(z.enum(['summary', 'experience', 'skills', 'education', 'certifications', 'projects']))
+    .max(6),
+  targetRole: short.optional(),
+  origin: z.enum(['imported', 'created']),
+  sourceResumeId: id.optional(),
+  version: z.number().int().min(0),
+  isMaster: z.boolean(),
+  createdAt: z.string().max(40),
+  updatedAt: z.string().max(40)
+})
+const SuggestionSchema = z.object({
+  id: z.string().max(200),
+  kind: z.enum([
+    'missing_contact',
+    'missing_summary',
+    'weak_verb',
+    'first_person',
+    'long_bullet',
+    'no_bullets',
+    'add_quantity',
+    'skill_in_text',
+    'target_keyword',
+    'duplicate_skill',
+    'date_missing',
+    'too_long',
+    'rewrite'
+  ]),
+  path: z.string().max(100),
+  section: z.enum([
+    'summary',
+    'experience',
+    'skills',
+    'education',
+    'certifications',
+    'projects',
+    'contact'
+  ]),
+  message: z.string().max(1000),
+  before: z.string().max(2000).optional(),
+  after: z.string().max(2000).optional(),
+  requiresConfirmation: z.boolean(),
+  source: z.enum(['rules', 'ollama'])
+})
+const QuestionnaireSchema = z.object({
+  contact: ResumeDocSchema.shape.contact,
+  targetRole: short,
+  experience: z
+    .array(
+      z.object({
+        title: short,
+        company: short,
+        location: short.optional(),
+        startDate: ym,
+        endDate: ym,
+        current: z.boolean(),
+        duties: z.string().max(4000)
+      })
+    )
+    .max(20),
+  education: z
+    .array(
+      z.object({
+        institution: short,
+        degree: short.optional(),
+        field: short.optional(),
+        graduationDate: z.string().max(20).optional()
+      })
+    )
+    .max(10),
+  skills: z.array(z.string().max(80)).max(120),
+  certifications: z
+    .array(z.object({ name: short, issuer: short.optional(), date: z.string().max(20).optional() }))
+    .max(30),
+  template: z.enum(['classic', 'modern', 'technical']),
+  pageSize: z.enum(['letter', 'a4'])
+})
+
 const SettingsPatch = z
   .object({
     demoMode: z.boolean(),
@@ -258,7 +411,8 @@ const SettingsPatch = z
             (u) => /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\/?$/.test(u),
             'Ollama must run on this computer (localhost)'
           ),
-        model: z.string().min(1).max(100)
+        model: z.string().min(1).max(100),
+        generateModel: z.string().max(100).optional()
       })
       .partial(),
     browser: z.object({
@@ -391,6 +545,32 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
   'telegram:revoke': z.object({ chatId: z.string().regex(/^-?\d{1,20}$/) }),
   'telegram:test': z.undefined(),
   'telegram:clear-webhook': z.undefined(),
+  'resume:list': z.undefined(),
+  'resume:get': z.object({ id }),
+  'resume:save': z.object({ doc: ResumeDocSchema, note: z.string().max(200).optional() }) as never,
+  'resume:delete': z.object({ id }),
+  'resume:versions': z.object({ id }),
+  'resume:version': z.object({ id, version: z.number().int().min(1) }),
+  'resume:import': z.object({ resumeId: id.optional() }),
+  'resume:create': QuestionnaireSchema as never,
+  'resume:role-skills': z.object({ role: z.string().max(120) }),
+  'resume:analyze': z.object({
+    doc: ResumeDocSchema,
+    targetRole: z.string().max(120).optional(),
+    jobId: id.optional(),
+    useAi: z.boolean().optional()
+  }) as never,
+  'resume:apply': z.object({
+    doc: ResumeDocSchema,
+    suggestion: SuggestionSchema,
+    edited: z.string().max(2000).optional()
+  }) as never,
+  'resume:export-pdf': z.object({ doc: ResumeDocSchema }) as never,
+  'resume:open-pdf': z.object({
+    path: z.string().min(1).max(1000),
+    reveal: z.boolean().optional()
+  }),
+  'resume:set-master': z.object({ id }),
   'matching:status': z.undefined(),
   'demo:seed': z.undefined()
 }
@@ -678,6 +858,53 @@ export function createHandlers(
       return true
     },
     'telegram:clear-webhook': () => svc.telegram.clearWebhook(),
+
+    'resume:list': async () => svc.resumeHelper.list(),
+    'resume:get': async ({ id }) => svc.resumeHelper.get(id),
+    'resume:save': async ({ doc, note }) => svc.resumeHelper.save(doc as ResumeDocument, note),
+    'resume:delete': async ({ id }) => {
+      store.resumeDocs.delete(id)
+      return svc.resumeHelper.list()
+    },
+    'resume:versions': async ({ id }) => store.resumeDocs.versions(id),
+    'resume:version': async ({ id, version }) => {
+      const d = store.resumeDocs.version(id, version)
+      if (!d) throw new Error('Version not found')
+      return d
+    },
+    'resume:import': async ({ resumeId }) => svc.resumeHelper.importFromProfile(resumeId),
+    'resume:create': async (a) => svc.resumeHelper.createFromAnswers(a),
+    'resume:role-skills': async ({ role }) => roleSkillHints(role),
+    'resume:analyze': ({ doc, targetRole, jobId, useAi }) =>
+      svc.resumeHelper.analyze(doc as ResumeDocument, { targetRole, jobId, useAi }),
+    'resume:apply': async ({ doc, suggestion, edited }) =>
+      svc.resumeHelper.apply(doc as ResumeDocument, suggestion, edited),
+    'resume:export-pdf': async ({ doc }) => {
+      if (!host.savePdfPath) throw new Error('Saving files is not available here')
+      const file = await host.savePdfPath(svc.resumeHelper.defaultFileName(doc as ResumeDocument))
+      if (!file) return null
+      const res = await svc.resumeHelper.exportPdf(doc as ResumeDocument, file)
+      return { path: res.path, pages: res.pages, bytes: res.bytes }
+    },
+    'resume:open-pdf': async ({ path: file, reveal }) => {
+      // Only files this session exported can be opened (no arbitrary paths from the renderer).
+      if (!svc.resumeHelper.wasExported(file)) throw new Error('Unknown file')
+      if (reveal) await host.showInFolder?.(file)
+      else await host.openPath?.(file)
+      return true
+    },
+    'resume:set-master': async ({ id }) => {
+      const doc = svc.resumeHelper.get(id)
+      const ok = await host.confirm(
+        `Use “${doc.name}” as your master resume?`,
+        'It becomes the resume attached to applications, and your profile’s experience, education, skills and contact details are replaced with its content. Stored jobs are re-scored. Earlier resumes stay available.',
+        'Set as master'
+      )
+      if (!ok) return null
+      const res = await svc.resumeHelper.setMaster(id)
+      jobsChanged()
+      return res
+    },
 
     'matching:status': () => svc.matching.embeddings.checkStatus(true),
     'demo:seed': async () => {
