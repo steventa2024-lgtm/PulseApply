@@ -6,6 +6,7 @@ import type {
   SearchIntent
 } from '../../../shared/types'
 import { buildIntent } from '../jobs/search/intent'
+import { OCCUPATION_BY_ID } from '../jobs/search/taxonomy'
 import type { GeoService } from '../jobs/geo/geoService'
 
 /** Defaults applied to every criteria object before use. Strict location filtering is the default. */
@@ -63,7 +64,8 @@ export function criteriaKey(c: SearchCriteria): string {
 }
 
 export function describeCriteria(c: SearchCriteria, intent?: SearchIntent): string {
-  const parts = [c.query || 'Any occupation']
+  const occ = (c.targetOccupations ?? []).map((id) => OCCUPATION_BY_ID.get(id)?.label ?? id)
+  const parts = [[c.query, ...occ].filter(Boolean).join(' + ') || 'Any occupation']
   const loc = c.location || intent?.locationText
   if (loc) {
     const r = intent?.radius ?? c.radius

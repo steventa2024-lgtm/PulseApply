@@ -20,7 +20,7 @@ import { CancelledError, RateLimitedError } from '../adapters/http'
 import type { JobProvider, ProviderQuery, RawRecord } from '../providers/types'
 import { missingCredentials } from '../providers/types'
 import { buildIntent } from '../search/intent'
-import { normalizeTitle } from '../search/classify'
+import { classifyQuery, normalizeTitle } from '../search/classify'
 import { OCCUPATION_BY_ID } from '../search/taxonomy'
 import { normalizeDraft } from '../normalization/normalize'
 import { dedupeJobs } from '../deduplication/dedupe'
@@ -220,20 +220,38 @@ export class SearchService {
       const intent: SearchIntent = runCtx.intent
       const country = runCtx.criteria.country ?? intent.location?.country
 
-      const query: ProviderQuery = {
+      // One provider query per occupation: the typed query first, then any extra
+      // target occupations (e.g. every occupation found in the resume).
+      const typedOcc = new Set(classifyQuery(intent.keywords[0] ?? ''))
+      const keywordSets: string[] = []
+      if (intent.keywords[0]) keywordSets.push(intent.keywords[0])
+      for (const id of runCtx.criteria.targetOccupations ?? []) {
+        const label = OCCUPATION_BY_ID.get(id)?.label
+        if (label && !typedOcc.has(id) && !keywordSets.includes(label)) keywordSets.push(label)
+      }
+      if (keywordSets.length === 0) keywordSets.push('')
+      const MAX_OCCUPATION_QUERIES = 6
+      keywordSets.splice(MAX_OCCUPATION_QUERIES)
+      const queryFor = (kw: string): ProviderQuery => ({
         intent,
-        keywords: intent.keywords[0] ?? '',
-        alternateKeywords: intent.occupationSynonyms
-          .filter((s) => normalizeTitle(s) !== normalizeTitle(intent.keywords[0] ?? ''))
-          .slice(0, 2),
+        keywords: kw,
+        alternateKeywords:
+          kw === intent.keywords[0]
+            ? intent.occupationSynonyms
+                .filter((s) => normalizeTitle(s) !== normalizeTitle(kw))
+                .slice(0, 2)
+            : [],
         location: intent.location,
         radiusKm: intent.radius ? toKm(intent.radius, intent.radiusUnit) : undefined,
         country: intent.location?.country ?? country,
         wantsRemote: intent.workModes.includes('remote'),
         wantsOnsite: intent.workModes.includes('onsite') || intent.workModes.includes('hybrid'),
         postedWithinDays: intent.postedWithinDays,
-        maxResults: 150
-      }
+        maxResults: keywordSets.length > 1 ? 100 : 150
+      })
+      const query = queryFor(keywordSets[0])
+      if (keywordSets.length > 1)
+        intent.notes.push(`Searched ${keywordSets.length} occupations: ${keywordSets.join(', ')}.`)
 
       // ---- 3. providers --------------------------------------------------------
       const selected: JobProvider[] = []
@@ -292,8 +310,25 @@ export class SearchService {
         phase: 'searching_providers',
         message: `Searching ${selected.length} employment source${selected.length === 1 ? '' : 's'}…`
       })
-      const outcomes = await this.runProviders(selected, query, signal, emit)
-      stats.providers.push(...outcomes.map((o) => o.report))
+      const outcomes: ProviderOutcome[] = []
+      for (const kw of keywordSets) {
+        if (signal.aborted) break
+        outcomes.push(...(await this.runProviders(selected, queryFor(kw), signal, emit)))
+      }
+      // One report per provider, summed over the occupation queries.
+      const reports = new Map<string, ProviderRunReport>()
+      for (const o of outcomes) {
+        const m = reports.get(o.provider.id)
+        if (!m) reports.set(o.provider.id, o.report)
+        else {
+          m.fetched += o.report.fetched
+          m.durationMs += o.report.durationMs
+          if (m.status !== 'ok' && (o.report.status === 'ok' || o.report.status === 'cached'))
+            m.status = o.report.status
+          if (o.report.reason && !m.reason) m.reason = o.report.reason
+        }
+      }
+      stats.providers.push(...reports.values())
       if (signal.aborted) throw new CancelledError()
 
       // ---- 4. normalize ----------------------------------------------------------
@@ -302,6 +337,7 @@ export class SearchService {
       const normalized: NormalizedJob[] = []
       for (const o of outcomes) {
         stats.fetched += o.records.length
+        const report = reports.get(o.provider.id)!
         for (const rec of o.records) {
           let res
           try {
@@ -319,9 +355,9 @@ export class SearchService {
           }
           if (res.job) {
             normalized.push(res.job)
-            o.report.normalized++
+            report.normalized++
           } else {
-            o.report.rejected++
+            report.rejected++
             stats.rejectedMalformed++
             log.debug(
               'normalize',
@@ -418,9 +454,9 @@ export class SearchService {
         .sort(byScore)
       stats.returned = final.length
 
-      for (const o of outcomes) {
-        if (o.report.status === 'ok' || o.report.status === 'cached')
-          store.providers.recordSuccess(o.provider.id, o.report.normalized)
+      for (const r of reports.values()) {
+        if (r.status === 'ok' || r.status === 'cached')
+          store.providers.recordSuccess(r.providerId, r.normalized)
       }
       const finishedAt = new Date().toISOString()
       store.searches.finishRun(runId, 'ok', stats)

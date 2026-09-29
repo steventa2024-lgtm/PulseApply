@@ -247,3 +247,40 @@ describe('TEST 4 — saved criteria are authoritative and survive restart', () =
     expect(s.store.jobs.list({ view: 'eligible' })).toHaveLength(0)
   })
 })
+
+describe('TEST 9 — search every occupation in the resume', () => {
+  it('queries each occupation from the resume and keeps only matching local jobs', async () => {
+    const asked: string[] = []
+    const provider = fixtureProvider([])
+    provider.fetch = async (q) => {
+      asked.push(q.keywords)
+      const all = [
+        draft('wh-la', 'Warehouse Associate', 'Los Angeles, CA'),
+        draft('ba-lb', 'Barista', 'Long Beach, CA', {
+          descriptionText: 'Espresso drinks, POS, cash handling, customer service.'
+        }),
+        draft('para-la', 'Paralegal', 'Los Angeles, CA', {
+          descriptionText: 'Legal research and customer service.'
+        }),
+        draft('ba-sf', 'Barista', 'San Francisco, CA')
+      ]
+      return all.map((d) => ({ sourceJobId: d.sourceJobId, payload: d }))
+    }
+    svc = (await makeServices({ providers: [provider] })).svc
+    svc.store.candidate.save(warehouseBaristaProfile())
+    const { criteria, occupations } = svc.criteria.fromResume()
+    expect(occupations.map((o) => o.label)).toEqual(
+      expect.arrayContaining(['Warehouse Associate', 'Barista'])
+    )
+    // Uses the profile location (Lakewood, CA) when no location was set.
+    expect(criteria.location).toBe('Lakewood, CA')
+    await svc.criteria.setActive(criteria)
+    const res = await svc.search.run(criteria, { trigger: 'manual' })
+    expect(asked).toEqual(expect.arrayContaining(['Warehouse Associate', 'Barista']))
+    expect(res.jobs.map((j) => j.sourceJobId).sort()).toEqual(['ba-lb', 'wh-la'])
+    expect(res.stats.excluded.irrelevant_occupation).toBe(1) // paralegal
+    expect(res.stats.excluded.outside_radius).toBe(1) // San Francisco
+    // Each provider is reported once even though it was queried per occupation.
+    expect(res.stats.providers.filter((p) => p.providerId === 'fixture')).toHaveLength(1)
+  })
+})

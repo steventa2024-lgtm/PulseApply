@@ -6,6 +6,7 @@ import type { MatchingService } from '../matching/matchingService'
 import { type CriteriaContext, criteriaKey, normalizeCriteria, resolveCriteria } from './criteria'
 import { applyMinimumScore, evaluateJobEligibility } from './evaluate'
 import { log } from '../logger'
+import { OCCUPATION_BY_ID } from '../jobs/search/taxonomy'
 
 const ACTIVE_KEY = 'active_criteria'
 const LEGACY_LAST_SEARCH_KEY = 'last_search'
@@ -50,6 +51,47 @@ export class CriteriaService {
       workModes: p.workModes,
       employmentTypes: p.employmentTypes
     })
+  }
+
+  /**
+   * Criteria built from the resume: every occupation the candidate has worked
+   * in (most experience first), then stated target roles, searched around the
+   * profile location. Nothing is inferred beyond what the resume states.
+   */
+  fromResume(): {
+    criteria: SearchCriteria
+    occupations: { id: string; label: string; months: number; source: 'history' | 'target' }[]
+  } {
+    const model = this.deps.matching.candidate()
+    const occupations = [...model.occupations]
+      .sort(
+        (a, b) =>
+          (a.source === 'history' ? 0 : 1) - (b.source === 'history' ? 0 : 1) || b.months - a.months
+      )
+      .slice(0, 6)
+      .map((o) => ({
+        id: o.id,
+        label: OCCUPATION_BY_ID.get(o.id)?.label ?? o.id,
+        months: o.months,
+        source: o.source
+      }))
+    if (!occupations.length)
+      throw new Error(
+        'No occupation could be identified from your resume. Upload a resume on the Profile page (or add job titles to your work history) first.'
+      )
+    const profile = this.deps.store.candidate.get()
+    const active = this.getActive()
+    return {
+      occupations,
+      criteria: normalizeCriteria({
+        ...active,
+        query: '',
+        targetOccupations: occupations.map((o) => o.id),
+        location:
+          active.location || profile.preferences.location || profile.location.value || undefined,
+        radius: active.radius ?? profile.preferences.radius ?? 25
+      })
+    }
   }
 
   hasActive(): boolean {

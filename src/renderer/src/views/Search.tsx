@@ -282,19 +282,35 @@ export default function Search(): React.JSX.Element {
   }
   const searchable = providers.filter((p) => !['restricted', 'discovery'].includes(p.kind))
 
-  const run = async (): Promise<void> => {
+  const canSearch = !!c.query.trim() || !!c.targetOccupations?.length
+  const [resumeOccs, setResumeOccs] = useState<{ label: string; months: number }[] | null>(null)
+  const run = (): Promise<void> => runWith(clean(c))
+  const searchFromResume = async (): Promise<void> => {
+    setError(null)
+    try {
+      const r = await call('criteria:from-resume')
+      const next = { ...EMPTY_CRITERIA, ...r.criteria }
+      touched.current = true
+      setC(next)
+      setResumeOccs(r.occupations)
+      await runWith(clean(next))
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+  const runWith = async (criteria: SearchCriteria): Promise<void> => {
     setBusy(true)
     setError(null)
     setProgress([])
     runIdRef.current = null
     try {
-      const res = await call('search:run', clean(c))
+      const res = await call('search:run', criteria)
       if (res.cancelled) {
         toast('Search cancelled')
         return
       }
       setLastSearch({
-        criteria: clean(c),
+        criteria,
         intent: res.intent,
         stats: res.stats,
         jobs: res.jobs,
@@ -358,9 +374,27 @@ export default function Search(): React.JSX.Element {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault()
-              if (!busy && c.query.trim()) void run()
+              if (!busy && canSearch) void run()
             }}
           >
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/25 bg-cyan-500/[0.06] p-3">
+              <div className="text-xs">
+                <p className="font-semibold text-cyan-100">Search every occupation in my resume</p>
+                <p className="text-slate-400">
+                  {resumeOccs
+                    ? `Searching: ${resumeOccs.map((o) => o.label).join(', ')}`
+                    : 'Finds jobs for each kind of work your resume shows (e.g. warehouse and barista), near your location.'}
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                loading={busy && !!resumeOccs}
+                disabled={busy}
+                onClick={() => void searchFromResume()}
+              >
+                Search using my resume
+              </Button>
+            </div>
             <div>
               <Label htmlFor="q">What job are you looking for?</Label>
               <Input
@@ -751,7 +785,7 @@ export default function Search(): React.JSX.Element {
                 type="submit"
                 variant="primary"
                 loading={busy}
-                disabled={!c.query.trim()}
+                disabled={!canSearch}
                 icon={<SearchIcon className="h-3.5 w-3.5" />}
               >
                 {busy ? 'Searching…' : 'Search'}
@@ -774,7 +808,7 @@ export default function Search(): React.JSX.Element {
               >
                 Save criteria
               </Button>
-              <Button disabled={!c.query.trim()} onClick={() => setSaveOpen(true)}>
+              <Button disabled={!canSearch} onClick={() => setSaveOpen(true)}>
                 Save as scheduled search
               </Button>
               <Button variant="ghost" onClick={() => setC(EMPTY_CRITERIA)}>

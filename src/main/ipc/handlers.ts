@@ -452,6 +452,7 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
   'criteria:save': SearchCriteriaSchema as never,
   'jobs:counters': z.undefined(),
   'criteria:occupations': z.undefined(),
+  'criteria:from-resume': z.undefined(),
   'search:run': SearchCriteriaSchema as never,
   'search:cancel': z.object({ runId: id }),
   'search:parse': SearchCriteriaSchema as never,
@@ -684,6 +685,7 @@ export function createHandlers(
       return res
     },
     'jobs:counters': () => svc.criteria.counters(),
+    'criteria:from-resume': async () => svc.criteria.fromResume(),
     'criteria:occupations': async () =>
       [...OCCUPATION_BY_ID.values()]
         .map((o) => ({ id: o.id, label: o.label, family: o.family }))

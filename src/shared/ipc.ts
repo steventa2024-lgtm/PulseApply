@@ -75,6 +75,13 @@ export interface IpcContract {
   'criteria:save': [SearchCriteria, { criteria: SearchCriteria; counters: JobCounters }]
   'jobs:counters': [void, JobCounters]
   'criteria:occupations': [void, { id: string; label: string; family: string }[]]
+  'criteria:from-resume': [
+    void,
+    {
+      criteria: SearchCriteria
+      occupations: { id: string; label: string; months: number; source: 'history' | 'target' }[]
+    }
+  ]
 
   'search:run': [SearchCriteria, SearchRunResult]
   'search:cancel': [{ runId: string }, boolean]
@@ -275,6 +282,7 @@ export const INVOKE_CHANNELS: IpcChannel[] = [
   'criteria:save',
   'jobs:counters',
   'criteria:occupations',
+  'criteria:from-resume',
   'search:run',
   'search:cancel',
   'search:parse',
