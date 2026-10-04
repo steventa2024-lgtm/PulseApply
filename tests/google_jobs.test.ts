@@ -306,3 +306,88 @@ describe.skipIf(!CHROMIUM)('Browse & Save page reader', () => {
     expect(r4.saved).toBe(true)
   })
 })
+
+describe('provider errors are explained and recovered', () => {
+  it('shows the provider’s own error message', async () => {
+    const { errorDetail } = await import('../src/main/services/jobs/adapters/http')
+    expect(errorDetail('{"message":"You are not subscribed to this API."}')).toBe(
+      'You are not subscribed to this API.'
+    )
+    expect(
+      errorDetail('{"error":"Invalid API key. abcdefghijklmnopqrstuvwxyz0123456789ABCD"}')
+    ).toBe('Invalid API key. …')
+  })
+
+  it('SerpApi retries with the place in the query when Google rejects the location', async () => {
+    const seen: URLSearchParams[] = []
+    svc = (
+      await makeServices({
+        fetchImpl: fakeFetch([
+          (u) => {
+            if (u.hostname !== 'serpapi.com') return undefined
+            seen.push(u.searchParams)
+            if (u.searchParams.get('location'))
+              return json(
+                {
+                  error:
+                    'Unsupported `Lakewood, California, United States` location - location parameter.'
+                },
+                400
+              )
+            return json({ jobs_results: SERP_PAGE_2.jobs_results })
+          }
+        ])
+      })
+    ).svc
+    svc.store.secrets.set('serpapi.apiKey', 'serp-key')
+    await svc.criteria.setActive({ query: 'Barista', location: 'Lakewood, CA', radius: 15 })
+    const r = await svc.search.testProvider('serpapi')
+    expect(seen[0].get('location')).toBe('Lakewood, California, United States')
+    expect(seen[1].get('location')).toBeNull()
+    expect(seen[1].get('q')).toBe('Barista near Lakewood, CA')
+    expect(r).toMatchObject({ ok: true, count: 1 })
+    expect(r.sample[0]).toContain('Barista — Bean Fixture')
+  })
+
+  it('JSearch retries with basic parameters, and the Test button reports real errors', async () => {
+    let calls = 0
+    svc = (
+      await makeServices({
+        fetchImpl: fakeFetch([
+          (u) => {
+            if (u.hostname !== 'jsearch.p.rapidapi.com') return undefined
+            calls++
+            return u.searchParams.get('radius')
+              ? json({ message: "Endpoint '/search' does not exist" }, 404)
+              : json(JSEARCH)
+          }
+        ])
+      })
+    ).svc
+    svc.store.secrets.set('jsearch.apiKey', 'k')
+    await svc.criteria.setActive({
+      query: 'Warehouse Associate',
+      location: 'Los Angeles, CA',
+      radius: 25
+    })
+    const ok = await svc.search.testProvider('jsearch')
+    expect(ok).toMatchObject({ ok: true, count: 3 })
+    expect(calls).toBe(2)
+    await svc.shutdown()
+
+    svc = (
+      await makeServices({
+        fetchImpl: fakeFetch([
+          (u) =>
+            u.hostname === 'jsearch.p.rapidapi.com'
+              ? json({ message: 'You are not subscribed to this API.' }, 403)
+              : undefined
+        ])
+      })
+    ).svc
+    svc.store.secrets.set('jsearch.apiKey', 'k')
+    const bad = await svc.search.testProvider('jsearch')
+    expect(bad).toMatchObject({ ok: false })
+    expect(bad.message).toBe('HTTP 403: You are not subscribed to this API.')
+  })
+})

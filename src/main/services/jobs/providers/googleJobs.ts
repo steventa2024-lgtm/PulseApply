@@ -2,6 +2,8 @@ import { z } from 'zod'
 import type { EmploymentType, SalaryPeriod } from '../../../../shared/types'
 import type { DraftJob, JobProvider, ProviderQuery, RawRecord } from './types'
 import { isoFromString, isoFromUnix, num, str } from './types'
+import { CA_PROVINCES, US_STATES, countryName } from '../geo/regions'
+import { HttpError } from '../adapters/http'
 
 /**
  * Google for Jobs, through licensed search APIs.
@@ -17,6 +19,21 @@ function where(q: ProviderQuery): string | undefined {
   const l = q.location
   if (!l || l.precision === 'none') return undefined
   return [l.city, l.region, l.city || l.region ? undefined : l.label].filter(Boolean).join(', ')
+}
+
+/** Google's long location form, e.g. "Lakewood, California, United States". */
+export function googleLocation(q: ProviderQuery): string | undefined {
+  const l = q.location
+  if (!l || l.precision === 'none') return undefined
+  const region =
+    l.country === 'US'
+      ? (US_STATES.find(([c]) => c === l.region)?.[1] ?? l.region)
+      : l.country === 'CA'
+        ? (CA_PROVINCES.find(([c]) => c === l.region)?.[2] ?? l.region)
+        : l.region
+  const country = l.country === 'US' ? 'United States' : countryName(l.country)
+  const parts = [l.city, region, country].filter(Boolean)
+  return parts.length ? parts.join(', ') : l.label
 }
 
 function datePosted(days?: number): string {
@@ -143,15 +160,31 @@ export const jsearchProvider: JobProvider = {
     if (remoteOnly) params.set('work_from_home', 'true')
     if (loc && q.radiusKm && !remoteOnly)
       params.set('radius', String(Math.max(1, Math.round(q.radiusKm))))
-    const data = await ctx.http.json<{ status?: string; data?: unknown[]; message?: string }>({
-      url: `https://jsearch.p.rapidapi.com/search?${params}`,
-      headers: {
-        'x-rapidapi-key': ctx.secret('jsearch.apiKey')!,
-        'x-rapidapi-host': 'jsearch.p.rapidapi.com'
-      },
-      signal: ctx.signal,
-      timeoutMs: this.timeoutMs
-    })
+    const call = (
+      p: URLSearchParams
+    ): Promise<{ status?: string; data?: unknown[]; message?: string }> =>
+      ctx.http.json({
+        url: `https://jsearch.p.rapidapi.com/search?${p}`,
+        headers: {
+          'x-rapidapi-key': ctx.secret('jsearch.apiKey')!,
+          'x-rapidapi-host': 'jsearch.p.rapidapi.com'
+        },
+        signal: ctx.signal,
+        timeoutMs: this.timeoutMs
+      })
+    let data: { status?: string; data?: unknown[]; message?: string }
+    try {
+      data = await call(params)
+    } catch (err) {
+      // Some plan/endpoint combinations reject optional filters; retry with the basics.
+      if (!(err instanceof HttpError) || ![400, 404, 422].includes(err.status)) throw err
+      const basic = new URLSearchParams({
+        query: params.get('query')!,
+        page: '1',
+        num_pages: '1'
+      })
+      data = await call(basic)
+    }
     if (!Array.isArray(data?.data)) throw new Error(data?.message ?? 'Unexpected JSearch response')
     const out: RawRecord[] = []
     for (const j of data.data) {
@@ -298,32 +331,52 @@ export const serpApiJobsProvider: JobProvider = {
   },
   isConfigured: (secret) => !!secret('serpapi.apiKey'),
   async fetch(q, ctx) {
-    const loc = where(q)
+    const loc = googleLocation(q)
+    const short = where(q)
     const remoteOnly = q.wantsRemote && !q.wantsOnsite
     const pages = Math.max(1, Math.min(5, Number(ctx.secret('serpapi.pages')) || 2))
     const out: RawRecord[] = []
     let token: string | undefined
+    // Google only accepts locations it knows; if it rejects ours, put the place in the query.
+    let useLocationParam = !!loc && !remoteOnly
     for (let page = 0; page < pages; page++) {
-      const params = new URLSearchParams({
-        engine: 'google_jobs',
-        q: remoteOnly ? `${q.keywords} remote` : q.keywords,
-        hl: 'en',
-        api_key: ctx.secret('serpapi.apiKey')!
-      })
-      if (loc && !remoteOnly) params.set('location', loc)
-      if (q.country) params.set('gl', q.country.toLowerCase())
-      if (loc && q.radiusKm && !remoteOnly)
-        params.set('lrad', String(Math.max(1, Math.round(q.radiusKm))))
-      if (token) params.set('next_page_token', token)
-      const data = await ctx.http.json<{
+      const build = (): URLSearchParams => {
+        const params = new URLSearchParams({
+          engine: 'google_jobs',
+          q: remoteOnly
+            ? `${q.keywords} remote`
+            : !useLocationParam && short
+              ? `${q.keywords} near ${short}`
+              : q.keywords,
+          hl: 'en',
+          api_key: ctx.secret('serpapi.apiKey')!
+        })
+        if (useLocationParam && loc) params.set('location', loc)
+        if (q.country) params.set('gl', q.country.toLowerCase())
+        if (useLocationParam && q.radiusKm)
+          params.set('lrad', String(Math.max(1, Math.round(q.radiusKm))))
+        if (token) params.set('next_page_token', token)
+        return params
+      }
+      type SerpResponse = {
         jobs_results?: unknown[]
         error?: string
         serpapi_pagination?: { next_page_token?: string }
-      }>({
-        url: `https://serpapi.com/search.json?${params}`,
-        signal: ctx.signal,
-        timeoutMs: this.timeoutMs
-      })
+      }
+      const get = (): Promise<SerpResponse> =>
+        ctx.http.json<SerpResponse>({
+          url: `https://serpapi.com/search.json?${build()}`,
+          signal: ctx.signal,
+          timeoutMs: this.timeoutMs
+        })
+      let data: SerpResponse
+      try {
+        data = await get()
+      } catch (err) {
+        if (!(err instanceof HttpError) || err.status !== 400 || !useLocationParam) throw err
+        useLocationParam = false
+        data = await get()
+      }
       if (data?.error && !/hasn't returned any results/i.test(data.error))
         throw new Error(data.error)
       for (const j of data?.jobs_results ?? []) {

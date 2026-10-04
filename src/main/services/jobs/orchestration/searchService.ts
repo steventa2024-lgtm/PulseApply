@@ -168,6 +168,74 @@ export class SearchService {
       .filter((l) => l.url)
   }
 
+  /**
+   * Sends one small real request to a provider (using the active criteria) and
+   * reports exactly what came back — for the Sources page "Test" button.
+   */
+  async testProvider(
+    id: string
+  ): Promise<{ ok: boolean; count: number; sample: string[]; message: string }> {
+    const p = this.deps.providers.find((x) => x.id === id)
+    if (!p || p.manualOnly || p.kind === 'discovery')
+      return { ok: false, count: 0, sample: [], message: 'This source cannot be tested.' }
+    const missing = missingCredentials(p, this.secret)
+    if (missing.length)
+      return { ok: false, count: 0, sample: [], message: `Missing: ${missing.join(', ')}` }
+    const ctx = await this.deps.criteria.context()
+    const intent = ctx.intent
+    const keywords =
+      intent.keywords[0] ||
+      intent.normalizedOccupations.map((o) => OCCUPATION_BY_ID.get(o)?.label).find(Boolean) ||
+      'customer service'
+    const q: ProviderQuery = {
+      intent,
+      keywords,
+      alternateKeywords: [],
+      location: intent.location,
+      radiusKm: intent.radius ? toKm(intent.radius, intent.radiusUnit) : undefined,
+      country: intent.location?.country,
+      wantsRemote: intent.workModes.includes('remote'),
+      wantsOnsite: intent.workModes.includes('onsite') || intent.workModes.includes('hybrid'),
+      maxResults: 10
+    }
+    const sup = p.supports(q)
+    if (!sup.ok) return { ok: false, count: 0, sample: [], message: sup.reason ?? 'Not applicable' }
+    const where = intent.location?.label ?? 'anywhere'
+    try {
+      const records = await p.fetch(q, {
+        http: this.deps.http,
+        secret: this.secret,
+        config: this.deps.store.providers.getConfig(p.id, {}),
+        employers: this.deps.store.employers.list(),
+        signal: AbortSignal.timeout(60_000),
+        contactEmail: this.deps.store.settings.get().contactEmailForApis,
+        onEmployerSynced: () => undefined
+      })
+      const sample = records
+        .slice(0, 5)
+        .map((r) => {
+          try {
+            const d = p.normalize(r)
+            return d ? `${d.title} — ${d.company} (${d.locationText || 'location not stated'})` : ''
+          } catch {
+            return ''
+          }
+        })
+        .filter(Boolean)
+      this.deps.store.providers.recordSuccess(p.id, records.length)
+      return {
+        ok: true,
+        count: records.length,
+        sample,
+        message: `Working: “${keywords}” near ${where} returned ${records.length} listing${records.length === 1 ? '' : 's'}.`
+      }
+    } catch (err) {
+      const message = (err as Error).message
+      this.deps.store.providers.recordError(p.id, message)
+      return { ok: false, count: 0, sample: [], message }
+    }
+  }
+
   cancel(runId: string): boolean {
     const c = this.running.get(runId)
     if (!c) return false

@@ -539,6 +539,7 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
     values: z.record(z.string().max(80), z.string().max(2000))
   }),
   'sources:clear-credentials': z.object({ providerId: z.string().max(50) }),
+  'sources:test': z.object({ providerId: z.string().max(50) }),
   'employers:list': z.undefined(),
   'employers:add-url': z.object({
     url: z.string().min(4).max(2048),
@@ -886,6 +887,8 @@ export function createHandlers(
       for (const c of p.credentials) store.secrets.delete(c.key)
       return svc.search.providerInfos()
     },
+
+    'sources:test': ({ providerId }) => svc.search.testProvider(providerId),
 
     'employers:list': async () => svc.employers.list(),
     'employers:add-url': async ({ url, name, country }) => {

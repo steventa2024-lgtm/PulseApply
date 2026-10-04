@@ -217,6 +217,10 @@ export interface IpcContract {
     ProviderInfo[]
   ]
   'sources:clear-credentials': [{ providerId: string }, ProviderInfo[]]
+  'sources:test': [
+    { providerId: string },
+    { ok: boolean; count: number; sample: string[]; message: string }
+  ]
 
   'employers:list': [void, EmployerRecord[]]
   'employers:add-url': [{ url: string; name?: string; country?: string }, EmployerRecord[]]
@@ -358,6 +362,7 @@ export const INVOKE_CHANNELS: IpcChannel[] = [
   'sources:set-enabled',
   'sources:set-credentials',
   'sources:clear-credentials',
+  'sources:test',
   'employers:list',
   'employers:add-url',
   'employers:add-board',

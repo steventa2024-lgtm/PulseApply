@@ -118,6 +118,20 @@ function ProviderCard({
       setBusy(false)
     }
   }
+  const [testing, setTesting] = useState(false)
+  const [test, setTest] = useState<{ ok: boolean; message: string; sample: string[] } | null>(null)
+  const runTest = async (): Promise<void> => {
+    setTesting(true)
+    try {
+      const r = await call('sources:test', { providerId: p.id })
+      setTest(r)
+      onChange(await call('sources:list'))
+    } catch (e) {
+      setTest({ ok: false, message: (e as Error).message, sample: [] })
+    } finally {
+      setTesting(false)
+    }
+  }
   const manualUrl = p.manualSearchUrlTemplate
     ? p.manualSearchUrlTemplate
         .replace('{q}', encodeURIComponent(lastSearch?.criteria.query ?? ''))
@@ -133,6 +147,21 @@ function ProviderCard({
         <Badge tone={st.tone}>{st.label}</Badge>
       </div>
       <p className="mt-2 text-[11px] text-slate-300">{p.statusDetail}</p>
+      {test && (
+        <div
+          className={`mt-2 rounded-lg border p-2 text-[11px] ${test.ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100' : 'border-rose-500/30 bg-rose-500/10 text-rose-100'}`}
+          data-testid={`test-${p.id}`}
+        >
+          <p>{test.ok ? test.message : `Test failed: ${test.message}`}</p>
+          {test.sample.length > 0 && (
+            <ul className="mt-1 list-disc pl-4 text-slate-200">
+              {test.sample.map((x) => (
+                <li key={x}>{x}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <dl className="mt-2 space-y-0.5 text-[11px] text-slate-500">
         <div>Markets: {p.markets}</div>
         <div>Limits: {p.rateLimitNote}</div>
@@ -205,6 +234,16 @@ function ProviderCard({
           <span />
         )}
         <div className="flex gap-2">
+          {!p.manualSearchUrlTemplate && p.kind !== 'discovery' && p.enabled && (
+            <Button
+              size="sm"
+              loading={testing}
+              onClick={() => void runTest()}
+              title="Sends one small real search using your current criteria"
+            >
+              Test
+            </Button>
+          )}
           {p.manualSearchUrlTemplate && (
             <Button
               size="sm"

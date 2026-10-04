@@ -51,6 +51,38 @@ export class CancelledError extends Error {
   }
 }
 
+/**
+ * Short, human-readable reason from an error response body. Long opaque
+ * tokens are masked so a provider echoing a credential never reaches the UI.
+ */
+export function errorDetail(body: string): string | undefined {
+  if (!body) return undefined
+  let msg: unknown
+  try {
+    const j = JSON.parse(body) as Record<string, unknown>
+    const errors = j.errors as unknown
+    msg =
+      j.message ??
+      j.error ??
+      j.detail ??
+      j.error_description ??
+      (Array.isArray(errors)
+        ? ((errors[0] as Record<string, unknown>)?.message ?? errors[0])
+        : errors)
+    if (msg && typeof msg === 'object')
+      msg = (msg as Record<string, unknown>).message ?? JSON.stringify(msg)
+  } catch {
+    msg = body.replace(/<[^>]+>/g, ' ')
+  }
+  if (typeof msg !== 'string') return undefined
+  const clean = msg
+    .replace(/\s+/g, ' ')
+    .replace(/[A-Za-z0-9_-]{32,}/g, '…')
+    .trim()
+    .slice(0, 200)
+  return clean || undefined
+}
+
 const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504])
 const MAX_RETRY_AFTER_MS = 20_000
 
@@ -165,8 +197,8 @@ export class HttpClient {
       }
 
       const retryAfter = parseRetryAfter(res.headers.get('retry-after'))
-      // Drain body so the connection can be reused.
-      await res.text().catch(() => '')
+      // Keep the provider's own explanation (e.g. "You are not subscribed to this API").
+      const detail = errorDetail(await res.text().catch(() => ''))
       if (res.status === 429 && retryAfter !== undefined && retryAfter > MAX_RETRY_AFTER_MS) {
         throw new RateLimitedError(req.url, retryAfter)
       }
@@ -177,7 +209,12 @@ export class HttpClient {
       }
       if (res.status === 429) throw new RateLimitedError(req.url, retryAfter ?? 60_000)
       log.debug('http', `HTTP ${res.status} for ${req.url}`)
-      throw new HttpError(`HTTP ${res.status}`, res.status, req.url, retryAfter)
+      throw new HttpError(
+        detail ? `HTTP ${res.status}: ${detail}` : `HTTP ${res.status}`,
+        res.status,
+        req.url,
+        retryAfter
+      )
     }
   }
 
