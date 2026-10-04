@@ -590,7 +590,8 @@ export function ResumeEditor({
                   />
                   <Input
                     aria-label="Graduated"
-                    type="month"
+                    placeholder="Year, e.g. 2018"
+                    maxLength={20}
                     value={e.graduationDate ?? ''}
                     onChange={(ev) => set({ graduationDate: ev.target.value || undefined })}
                   />

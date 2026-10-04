@@ -1,3 +1,4 @@
+import fs from 'fs'
 import { z } from 'zod'
 import { createHash } from 'crypto'
 import type { IpcChannel, IpcPayload, IpcResultData } from '../../shared/ipc'
@@ -486,6 +487,20 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
   'jobs:dismiss': z.object({ id, dismissed: z.boolean() }),
   'jobs:verify': z.object({ id }),
   'jobs:open-external': z.object({ url: z.string().max(2048) }),
+  'jobs:import-url': z.object({ url: z.string().min(4).max(2048) }),
+  'jobs:import-manual': z.object({
+    title: z.string().trim().min(2).max(300),
+    company: z.string().trim().min(1).max(200),
+    location: z.string().max(300),
+    url: z.string().min(4).max(2048),
+    description: z.string().max(50_000).optional(),
+    salary: z.string().max(200).optional(),
+    employmentType: z.string().max(60).optional(),
+    workMode: z.enum(['onsite', 'hybrid', 'remote']).optional()
+  }),
+  'jobs:inbox-status': z.undefined(),
+  'jobs:inbox-scan': z.undefined(),
+  'jobs:inbox-open': z.undefined(),
   'applications:list': z.object({ states: z.array(appState).optional() }),
   'applications:events': z.object({ id }),
   'applications:start': z.object({ jobId: id, resumeId: id.optional() }),
@@ -767,6 +782,29 @@ export function createHandlers(
     'jobs:open-external': async ({ url }) => {
       if (!isPublicHttpUrl(url)) throw new Error('Only public http(s) links can be opened')
       await host.openExternal(url)
+      return true
+    },
+
+    'jobs:import-url': async ({ url }) => {
+      const res = await svc.imports.importUrl(url)
+      jobsChanged()
+      return res
+    },
+    'jobs:import-manual': async (input) => {
+      const res = await svc.imports.importManual({ ...input, location: input.location ?? '' })
+      jobsChanged()
+      return res
+    },
+    'jobs:inbox-status': async () => svc.imports.status(),
+    'jobs:inbox-scan': async () => {
+      await svc.imports.scanInbox()
+      jobsChanged()
+      return svc.imports.status()
+    },
+    'jobs:inbox-open': async () => {
+      const dir = svc.imports.status().path
+      fs.mkdirSync(dir, { recursive: true })
+      await host.openPath?.(dir)
       return true
     },
 

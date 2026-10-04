@@ -10,6 +10,7 @@ import { ALL_PROVIDERS } from '../services/jobs/providers'
 import type { JobProvider } from '../services/jobs/providers/types'
 import { SearchService } from '../services/jobs/orchestration/searchService'
 import { EmployerService } from '../services/jobs/discovery/employers'
+import { JobImportService } from '../services/jobs/import/jobImport'
 import { EmbeddingService } from '../services/matching/embeddings'
 import { MatchingService } from '../services/matching/matchingService'
 import { CriteriaService } from '../services/eligibility/criteriaService'
@@ -51,6 +52,7 @@ export interface Services {
   http: HttpClient
   search: SearchService
   employers: EmployerService
+  imports: JobImportService
   matching: MatchingService
   criteria: CriteriaService
   resumes: ResumeService
@@ -85,11 +87,16 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
   const geo = new GeoService(gazetteer, store.db, http, () => store.settings.get().onlineGeocoding)
   const embeddings = new EmbeddingService(store.db, http, () => store.settings.get().ollama)
   const matching = new MatchingService(store, geo, embeddings)
+  // The import service is created later; criteria changes refresh its search request.
+  const late: { imports?: JobImportService } = {}
   const criteria = new CriteriaService({
     store,
     geo,
     matching,
-    onChanged: () => opts.emit('jobs:changed', null)
+    onChanged: () => {
+      opts.emit('jobs:changed', null)
+      void late.imports?.writeSearchRequest()
+    }
   })
   const search = new SearchService({
     store,
@@ -99,6 +106,16 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
     criteria
   })
   const employers = new EmployerService(store, http)
+  const imports = new JobImportService({
+    store,
+    geo,
+    http,
+    criteria,
+    inboxDir: path.join(opts.userDataDir, 'inbox'),
+    skipDnsCheck: opts.allowPrivateHosts,
+    onImported: () => opts.emit('jobs:changed', null)
+  })
+  late.imports = imports
   const resumesDir = path.join(opts.userDataDir, 'resumes')
   const resumes = new ResumeService(store, resumesDir, gazetteer)
   const resumeHelper = new ResumeHelperService({
@@ -148,6 +165,7 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
     http,
     search,
     employers,
+    imports,
     matching,
     criteria,
     resumes,
@@ -191,6 +209,7 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
       if (shuttingDown) return shuttingDown
       shuttingDown = (async () => {
         scheduler.stop()
+        imports.stop()
         search.cancelAll()
         await Promise.allSettled([telegram.shutdown(), applications.shutdown()])
         store.db.close()

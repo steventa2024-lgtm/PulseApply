@@ -15,6 +15,7 @@ import {
 import { useLoader } from '../lib/useLoader'
 import { call } from '../lib/api'
 import { PROVIDER_STATUS, timeAgo } from '../lib/format'
+import { JobInboxCard } from './AddJob'
 import { useApp } from '../lib/appContext'
 
 const KIND_ORDER: { kind: ProviderInfo['kind']; title: string; subtitle: string }[] = [
@@ -61,6 +62,7 @@ export default function Sources(): React.JSX.Element {
         title="Sources"
         subtitle="Every job PulseApply shows comes from one of these sources. Status reflects real requests, not assumptions."
       />
+      <JobInboxCard />
       {KIND_ORDER.map((g) => {
         const list = (providers.data ?? []).filter((p) => p.kind === g.kind)
         if (!list.length) return null

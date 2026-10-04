@@ -79,18 +79,25 @@ export class AppDb {
     this.flush()
   }
 
+  private assertOpen(): void {
+    if (this.closed) throw new Error('The database is closed (PulseApply is shutting down)')
+  }
+
   exec(sql: string): void {
+    this.assertOpen()
     this.db.exec(sql)
     this.markDirty()
   }
 
   run(sql: string, params: Params = []): number {
+    this.assertOpen()
     this.db.run(sql, params as never)
     this.markDirty()
     return this.db.getRowsModified()
   }
 
   all<T = Record<string, unknown>>(sql: string, params: Params = []): T[] {
+    this.assertOpen()
     const stmt = this.db.prepare(sql)
     try {
       stmt.bind(params as never)

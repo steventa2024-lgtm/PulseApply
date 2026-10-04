@@ -207,6 +207,7 @@ async function bootstrap(): Promise<void> {
 
   void services.telegram.resumeIfEnabled()
   services.scheduler.start()
+  services.imports.startWatching()
   const housekeeping = (): void => {
     if (!services) return
     services.store.jobs.markExpired()

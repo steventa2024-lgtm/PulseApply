@@ -10,6 +10,7 @@ import {
   Info,
   Layers,
   MapPin,
+  Plus,
   RefreshCw,
   Send,
   ShieldCheck,
@@ -35,6 +36,7 @@ import {
   timeAgo
 } from '../lib/format'
 import { useApp } from '../lib/appContext'
+import { AddJobModal } from './AddJob'
 
 type ViewMode = 'eligible' | 'new' | 'review' | 'excluded' | 'saved' | 'archive' | 'dismissed'
 type Sort = 'match' | 'date' | 'distance'
@@ -71,6 +73,7 @@ export default function Results(): React.JSX.Element {
   const [selected, setSelected] = useState<ScoredJob | null>(null)
   const [links, setLinks] = useState<{ providerId: string; name: string; url: string }[]>([])
   const [reload, setReload] = useState(0)
+  const [addOpen, setAddOpen] = useState(false)
 
   const changeMode = (m: ViewMode): void => {
     setMode(m)
@@ -163,11 +166,17 @@ export default function Results(): React.JSX.Element {
         title="Results"
         subtitle={c ? `Criteria: ${c.criteriaLabel}` : 'Jobs stored in your local index'}
         actions={
-          <Button icon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => go('search')}>
-            Edit criteria
-          </Button>
+          <div className="flex gap-2">
+            <Button icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setAddOpen(true)}>
+              Add a job
+            </Button>
+            <Button icon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => go('search')}>
+              Edit criteria
+            </Button>
+          </div>
         }
       />
+      <AddJobModal open={addOpen} onClose={() => setAddOpen(false)} />
 
       {c && (
         <div

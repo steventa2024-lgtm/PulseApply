@@ -30,6 +30,22 @@ import type {
   ResumeVersionInfo
 } from './resume'
 
+export interface JobImportResult {
+  added: number
+  updated: number
+  jobs: ScoredJob[]
+  errors: string[]
+}
+
+export interface JobInboxStatus {
+  path: string
+  pending: number
+  imported: number
+  failed: number
+  lastScanAt?: string
+  lastResult?: { files: number; added: number; updated: number; errors: string[] }
+}
+
 /** Answers from the guided "Create new resume" flow. */
 export interface ResumeQuestionnairePayload {
   contact: ResumeDocument['contact']
@@ -126,6 +142,23 @@ export interface IpcContract {
   'jobs:dismiss': [{ id: string; dismissed: boolean }, ScoredJob | null]
   'jobs:verify': [{ id: string }, ScoredJob | null]
   'jobs:open-external': [{ url: string }, boolean]
+  'jobs:import-url': [{ url: string }, JobImportResult]
+  'jobs:import-manual': [
+    {
+      title: string
+      company: string
+      location: string
+      url: string
+      description?: string
+      salary?: string
+      employmentType?: string
+      workMode?: 'onsite' | 'hybrid' | 'remote'
+    },
+    JobImportResult
+  ]
+  'jobs:inbox-status': [void, JobInboxStatus]
+  'jobs:inbox-scan': [void, JobInboxStatus]
+  'jobs:inbox-open': [void, boolean]
 
   'applications:list': [{ states?: ApplicationState[] }, ApplicationRecord[]]
   'applications:events': [{ id: string }, ApplicationEvent[]]
@@ -296,6 +329,11 @@ export const INVOKE_CHANNELS: IpcChannel[] = [
   'jobs:dismiss',
   'jobs:verify',
   'jobs:open-external',
+  'jobs:import-url',
+  'jobs:import-manual',
+  'jobs:inbox-status',
+  'jobs:inbox-scan',
+  'jobs:inbox-open',
   'applications:list',
   'applications:events',
   'applications:start',

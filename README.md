@@ -55,7 +55,7 @@ Quality checks:
 ```bash
 npm run lint
 npm run typecheck
-npm test               # 103 tests; the UI test needs `npm run build` first, browser/PDF tests need Chromium
+npm test               # 109 tests; the UI test needs `npm run build` first, browser/PDF tests need Chromium
 ```
 
 > **Application browser.** Autofill opens a *visible* browser. PulseApply tries, in order: a custom
@@ -161,6 +161,27 @@ old default work-authorization value is **not** imported, the previous sample jo
 for history but hidden, and jobs previously marked “applied” become `SUBMISSION_UNVERIFIED` (the old
 version recorded approval, not an observed submission). Details appear under Settings → Data.
 
+## Adding jobs the sources did not find
+
+* **Add a job** (Results page) — paste a job link: PulseApply reads the page's structured job
+  data (schema.org `JobPosting`, the same data Google for Jobs uses; most employer career sites
+  and applicant-tracking pages publish it). Or **Enter details** by hand. LinkedIn, Indeed,
+  Glassdoor and ZipRecruiter forbid automated reading, so for those use *Enter details*.
+* **Job inbox** (Sources page) — JSON files dropped into `%APPDATA%\pulseapply\inbox` are
+  imported automatically within seconds and moved to `inbox/imported` (or `inbox/failed` with an
+  explanation). PulseApply writes `_search-request.json` there with your current occupations and
+  area.
+* **“Find jobs near me” Claude skill** — `.claude/skills/find-jobs-near-me/SKILL.md`. Open this
+  folder in Claude Code (desktop app or terminal) with a browser available (Claude in Chrome or
+  the built-in browser) and ask *“find jobs near me”*. Claude reads the search request, browses
+  public employer and job pages, records only what each page states, and drops a file in the
+  inbox. It never signs in, never bypasses CAPTCHAs, and skips LinkedIn/Indeed/Glassdoor/
+  ZipRecruiter.
+
+Every imported job keeps its link to the original posting, is marked *Unverified* until you click
+*Check availability*, and goes through the same occupation/location/work-mode filters as API
+results.
+
 ## Resume Helper
 
 * **Improve existing resume** — pick an uploaded resume (or upload one). PulseApply turns it into an
@@ -201,6 +222,7 @@ is never shown in normal mode and nothing is sent anywhere.
 |---|---|
 | “No job source could be queried” | Add an Adzuna/Jooble/USAJOBS key or register employers on **Sources**. |
 | A source shows *Rate-limited* | Wait for the shown time; results are cached meanwhile. |
+| `npm run dev` says “Electron uninstall” / “Electron failed to install correctly” | Run `node scripts/ensure-electron.mjs` (or `node node_modules/electron/install.js`). Newer npm versions can skip Electron's download step; `npm install` and `npm run dev` now run this check automatically. |
 | “Could not start a browser” | `npx playwright install chromium`, or install Chrome/Edge, or set a path in Settings. |
 | Telegram 409 | Stop other clients using the token; remove any webhook. |
 | Scanned resume | Upload DOCX or text PDF, or install `tesseract.js`. |
