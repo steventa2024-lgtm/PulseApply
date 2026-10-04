@@ -8,7 +8,7 @@
  * no-op when the binary is already present.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
@@ -29,16 +29,54 @@ const binaryPresent = (file) =>
   existsSync(file) && existsSync(path.join(dir, 'dist', readFileSync(file, 'utf8').trim()))
 
 if (binaryPresent(pathFile)) process.exit(0)
+
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
+const runInstaller = (extraEnv) =>
+  spawnSync(process.execPath, [path.join(dir, 'install.js')], {
+    cwd: dir,
+    stdio: 'inherit',
+    env: { ...process.env, ...extraEnv }
+  })
+
 console.log('[ensure-electron] Downloading the Electron binary…')
-const res = spawnSync(process.execPath, [path.join(dir, 'install.js')], {
-  cwd: dir,
-  stdio: 'inherit',
-  env: process.env
-})
+let res = runInstaller({})
 if (res.status !== 0 || !binaryPresent(pathFile)) {
+  // A half-extracted dist folder or a corrupt cached zip makes the installer
+  // think it is done. Start clean and bypass the download cache once.
+  console.log('[ensure-electron] Retrying with a clean download…')
+  rmSync(path.join(dir, 'dist'), { recursive: true, force: true })
+  rmSync(pathFile, { force: true })
+  res = runInstaller({ force_no_cache: 'true' })
+}
+if (res.status !== 0 || !binaryPresent(pathFile)) {
+  const distDir = path.join(dir, 'dist')
+  const files = existsSync(distDir) ? readdirSync(distDir) : []
   console.error(
-    '\n[ensure-electron] Electron could not be downloaded. Check your internet connection or proxy,\n' +
-      'then run:  node node_modules/electron/install.js\n'
+    [
+      '',
+      '[ensure-electron] Electron could not be installed.',
+      `  electron version : ${JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')).version}`,
+      `  installer exit   : ${res.status}${res.error ? ` (${res.error.message})` : ''}`,
+      `  path.txt         : ${existsSync(pathFile) ? readFileSync(pathFile, 'utf8') : 'missing'}`,
+      `  dist folder      : ${files.length} file(s)${files.length ? ` — ${files.slice(0, 6).join(', ')}` : ''}`,
+      `  settings         : ${
+        [
+          'ELECTRON_SKIP_BINARY_DOWNLOAD',
+          'ELECTRON_OVERRIDE_DIST_PATH',
+          'ELECTRON_MIRROR',
+          'electron_config_cache',
+          'HTTPS_PROXY'
+        ]
+          .filter((k) => process.env[k] !== undefined)
+          .map((k) => `${k} is set`)
+          .join(', ') || 'none'
+      }`,
+      '',
+      'If the dist folder has files but no electron.exe, your antivirus probably removed it',
+      '(Windows Security → Virus & threat protection → Protection history).',
+      'Manual install: see "Electron failed to install" in README.md.',
+      ''
+    ].join('\n')
   )
   process.exit(1)
 }

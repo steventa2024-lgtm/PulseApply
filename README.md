@@ -222,11 +222,30 @@ is never shown in normal mode and nothing is sent anywhere.
 |---|---|
 | “No job source could be queried” | Add an Adzuna/Jooble/USAJOBS key or register employers on **Sources**. |
 | A source shows *Rate-limited* | Wait for the shown time; results are cached meanwhile. |
-| `npm run dev` says “Electron uninstall” / “Electron failed to install correctly” | Run `node scripts/ensure-electron.mjs` (or `node node_modules/electron/install.js`). Newer npm versions can skip Electron's download step; `npm install` and `npm run dev` now run this check automatically. |
+| `npm run dev` says “Electron uninstall” / “Electron failed to install correctly” | Run `node scripts/ensure-electron.mjs` — it retries cleanly and prints what is missing. If it still fails, install Electron manually (below). |
 | “Could not start a browser” | `npx playwright install chromium`, or install Chrome/Edge, or set a path in Settings. |
 | Telegram 409 | Stop other clients using the token; remove any webhook. |
 | Scanned resume | Upload DOCX or text PDF, or install `tesseract.js`. |
 | Verbose logs | Run with `PULSEAPPLY_DEBUG=1` (secrets are always redacted). |
+
+### Electron failed to install (manual fix, Windows PowerShell)
+
+Run inside the project folder:
+
+```powershell
+$v = (Get-Content node_modules\electron\package.json | ConvertFrom-Json).version
+$zip = "$env:TEMP\electron-v$v-win32-x64.zip"
+Invoke-WebRequest "https://github.com/electron/electron/releases/download/v$v/electron-v$v-win32-x64.zip" -OutFile $zip
+Remove-Item -Recurse -Force node_modules\electron\dist -ErrorAction SilentlyContinue
+Expand-Archive $zip -DestinationPath node_modules\electron\dist
+Set-Content -NoNewline node_modules\electron\path.txt "electron.exe"
+Set-Content -NoNewline node_modules\electron\dist\version "$v"
+Test-Path node_modules\electron\dist\electron.exe   # must print True
+npm run dev
+```
+
+If `Test-Path` prints `False` right after extracting, your antivirus removed `electron.exe`; restore
+it from Windows Security → Protection history (or allow the project folder) and extract again.
 
 ## Project layout
 
