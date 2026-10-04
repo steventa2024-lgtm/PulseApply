@@ -24,6 +24,8 @@ export interface HostBridge {
   savePdfPath?(defaultName: string): Promise<string | null>
   openPath?(file: string): Promise<void>
   showInFolder?(file: string): Promise<void>
+  /** Opens the Browse & Save window (Electron only). */
+  openJobBrowser?(url: string): void
   confirm(message: string, detail: string, confirmLabel?: string): Promise<boolean>
   openExternal(url: string): Promise<void>
   appInfo(): Omit<AppInfo, 'migration' | 'demoMode' | 'dbPath' | 'userDataPath' | 'secureStorage'>
@@ -501,6 +503,10 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
   'jobs:inbox-status': z.undefined(),
   'jobs:inbox-scan': z.undefined(),
   'jobs:inbox-open': z.undefined(),
+  'jobs:browse': z.object({
+    providerId: z.string().max(50).optional(),
+    url: z.string().max(2048).optional()
+  }),
   'applications:list': z.object({ states: z.array(appState).optional() }),
   'applications:events': z.object({ id }),
   'applications:start': z.object({ jobId: id, resumeId: id.optional() }),
@@ -794,6 +800,26 @@ export function createHandlers(
       const res = await svc.imports.importManual({ ...input, location: input.location ?? '' })
       jobsChanged()
       return res
+    },
+    'jobs:browse': async ({ providerId, url }) => {
+      if (!host.openJobBrowser)
+        throw new Error('Browse & Save is only available in the desktop app')
+      let target = url
+      if (providerId) {
+        const c = svc.criteria.getActive()
+        const occ = (c.targetOccupations ?? [])
+          .map((o) => OCCUPATION_BY_ID.get(o)?.label)
+          .filter(Boolean)[0]
+        const ctx = await svc.criteria.context()
+        const location =
+          c.location || ctx.intent.location?.label || ctx.intent.locationText || undefined
+        target = svc.search
+          .manualLinks({ ...c, query: c.query || occ || '', location })
+          .find((l) => l.providerId === providerId)?.url
+      }
+      if (!target || !isPublicHttpUrl(target)) throw new Error('Nothing to open')
+      host.openJobBrowser(target)
+      return true
     },
     'jobs:inbox-status': async () => svc.imports.status(),
     'jobs:inbox-scan': async () => {

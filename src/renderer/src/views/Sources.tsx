@@ -1,5 +1,13 @@
 import { useState } from 'react'
-import { Building2, ExternalLink, KeyRound, Plus, Search as SearchIcon, Trash2 } from 'lucide-react'
+import {
+  Building2,
+  Compass,
+  ExternalLink,
+  KeyRound,
+  Plus,
+  Search as SearchIcon,
+  Trash2
+} from 'lucide-react'
 import type { AtsProvider, EmployerRecord, ProviderInfo } from '../../../shared/types'
 import {
   Badge,
@@ -197,13 +205,28 @@ function ProviderCard({
           <span />
         )}
         <div className="flex gap-2">
+          {p.manualSearchUrlTemplate && (
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Compass className="h-3 w-3" />}
+              onClick={() =>
+                void call('jobs:browse', { providerId: p.id }).catch((e) =>
+                  toast((e as Error).message, 'error')
+                )
+              }
+              title="Opens the site in a PulseApply window with a “Save job” button"
+            >
+              Browse & Save
+            </Button>
+          )}
           {manualUrl && (
             <Button
               size="sm"
               icon={<ExternalLink className="h-3 w-3" />}
               onClick={() => void call('jobs:open-external', { url: manualUrl })}
             >
-              Open search
+              Open in my browser
             </Button>
           )}
           {p.signupUrl && (

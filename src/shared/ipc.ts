@@ -159,6 +159,8 @@ export interface IpcContract {
   'jobs:inbox-status': [void, JobInboxStatus]
   'jobs:inbox-scan': [void, JobInboxStatus]
   'jobs:inbox-open': [void, boolean]
+  /** Opens the Browse & Save window on a job site's search for the active criteria (or a URL). */
+  'jobs:browse': [{ providerId?: string; url?: string }, boolean]
 
   'applications:list': [{ states?: ApplicationState[] }, ApplicationRecord[]]
   'applications:events': [{ id: string }, ApplicationEvent[]]
@@ -334,6 +336,7 @@ export const INVOKE_CHANNELS: IpcChannel[] = [
   'jobs:inbox-status',
   'jobs:inbox-scan',
   'jobs:inbox-open',
+  'jobs:browse',
   'applications:list',
   'applications:events',
   'applications:start',

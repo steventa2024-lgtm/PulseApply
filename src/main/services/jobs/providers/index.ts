@@ -10,6 +10,7 @@ import { adzunaProvider, joobleProvider, usajobsProvider } from './aggregators'
 import { ashbyProvider, greenhouseProvider, leverProvider, smartRecruitersProvider } from './ats'
 import { careerPagesProvider } from './careerPages'
 import { careerOneStopProvider, theMuseProvider } from './localBoards'
+import { jsearchProvider, serpApiJobsProvider } from './googleJobs'
 import {
   glassdoorProvider,
   indeedProvider,
@@ -42,6 +43,8 @@ export const braveDiscoveryProvider: JobProvider = {
 }
 
 export const ALL_PROVIDERS: JobProvider[] = [
+  jsearchProvider,
+  serpApiJobsProvider,
   adzunaProvider,
   joobleProvider,
   usajobsProvider,

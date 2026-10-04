@@ -89,7 +89,17 @@ export class SearchService {
       let detail: string
       if (p.manualOnly) {
         status = 'MANUAL'
-        detail = 'No authorized API access — use “Open search” to browse manually.'
+        const via = this.deps.providers
+          .filter(
+            (x) =>
+              (x.id === 'jsearch' || x.id === 'serpapi') &&
+              store.providers.isEnabled(x.id, x.defaultEnabled) &&
+              missingCredentials(x, this.secret).length === 0
+          )
+          .map((x) => x.name)
+        detail = via.length
+          ? `Its listings are included in your searches through ${via.join(' and ')}. Use Browse & Save to add a job you are viewing.`
+          : 'Not searched yet: connect JSearch or SerpApi (Google Jobs) above to include its listings, or use Browse & Save.'
       } else if (!enabled) {
         status = 'DISABLED'
         detail = 'Disabled by you.'

@@ -34,7 +34,7 @@ function manualProvider(
     manualOnly: true,
     supports: () => ({
       ok: false,
-      reason: 'No authorized API access; open the search in your browser instead'
+      reason: 'Covered through Google Jobs (JSearch / SerpApi) and Browse & Save'
     }),
     isConfigured: () => false,
     fetch: async () => [],
@@ -46,7 +46,7 @@ export const linkedinProvider = manualProvider({
   id: 'linkedin',
   name: 'LinkedIn Jobs',
   description:
-    'LinkedIn’s job APIs are limited to approved partners; automated scraping violates its terms.',
+    'Jobs posted on LinkedIn come in through Google Jobs (connect JSearch or SerpApi). Use Browse & Save to add any LinkedIn job you are viewing.',
   markets: 'Worldwide (manual browsing)',
   docsUrl: 'https://learn.microsoft.com/en-us/linkedin/talent/job-postings',
   termsNote:
@@ -58,7 +58,7 @@ export const indeedProvider = manualProvider({
   id: 'indeed',
   name: 'Indeed',
   description:
-    'Indeed’s public job-search (Publisher) API is closed to new integrations; scraping is prohibited.',
+    'Jobs posted on Indeed come in through Google Jobs (connect JSearch or SerpApi). Use Browse & Save to add any Indeed job you are viewing.',
   markets: 'Worldwide (manual browsing)',
   docsUrl: 'https://docs.indeed.com/',
   termsNote: 'Licensed access only. PulseApply opens a pre-filled Indeed search for you to browse.',
@@ -68,7 +68,8 @@ export const indeedProvider = manualProvider({
 export const zipRecruiterProvider = manualProvider({
   id: 'ziprecruiter',
   name: 'ZipRecruiter',
-  description: 'Job-search API available only to approved partners.',
+  description:
+    'Jobs posted on ZipRecruiter come in through Google Jobs (connect JSearch or SerpApi). Use Browse & Save to add any job you are viewing.',
   markets: 'US, Canada, UK (manual browsing)',
   termsNote: 'Partner access only. PulseApply opens a pre-filled search for you to browse.',
   manualSearchUrlTemplate: 'https://www.ziprecruiter.com/jobs-search?search={q}&location={l}'
@@ -77,7 +78,8 @@ export const zipRecruiterProvider = manualProvider({
 export const glassdoorProvider = manualProvider({
   id: 'glassdoor',
   name: 'Glassdoor',
-  description: 'No public job-search API.',
+  description:
+    'Jobs posted on Glassdoor come in through Google Jobs (connect JSearch or SerpApi). Use Browse & Save to add any job you are viewing.',
   markets: 'Worldwide (manual browsing)',
   termsNote: 'PulseApply opens a pre-filled search for you to browse.',
   manualSearchUrlTemplate: 'https://www.glassdoor.com/Job/jobs.htm?sc.keyword={q}&locKeyword={l}'

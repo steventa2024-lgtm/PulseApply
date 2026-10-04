@@ -9,6 +9,7 @@ import type { SecretCipher } from './services/persistence/secrets'
 import { isPublicHttpUrl } from './services/jobs/verification/urlSafety'
 import { log, redact } from './services/logger'
 import { ElectronPdfPrinter } from './resumePrinter'
+import { openJobBrowser } from './jobBrowser'
 
 const pdfPrinter = new ElectronPdfPrinter()
 
@@ -139,6 +140,9 @@ function registerIpc(svc: Services): void {
       async openPath(file) {
         const err = await shell.openPath(file)
         if (err) throw new Error(err)
+      },
+      openJobBrowser(url) {
+        openJobBrowser(svc, url, () => send('jobs:changed', null))
       },
       async showInFolder(file) {
         shell.showItemInFolder(file)

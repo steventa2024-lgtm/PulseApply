@@ -322,16 +322,20 @@ export default function Results(): React.JSX.Element {
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className="text-slate-500"
-                  title="These sites have no authorized API; PulseApply opens the search for you to browse manually."
+                  title="Opens the site in a PulseApply window with a “Save job” button on every job page."
                 >
-                  Also browse manually:
+                  Browse & Save:
                 </span>
                 {links.map((l) => (
                   <Button
                     key={l.providerId}
                     size="sm"
                     icon={<ExternalLink className="h-3 w-3" />}
-                    onClick={() => void call('jobs:open-external', { url: l.url })}
+                    onClick={() =>
+                      void call('jobs:browse', { providerId: l.providerId }).catch(() =>
+                        call('jobs:open-external', { url: l.url })
+                      )
+                    }
                   >
                     {l.name}
                   </Button>

@@ -55,7 +55,7 @@ Quality checks:
 ```bash
 npm run lint
 npm run typecheck
-npm test               # 109 tests; the UI test needs `npm run build` first, browser/PDF tests need Chromium
+npm test               # 115 tests; the UI test needs `npm run build` first, browser/PDF tests need Chromium
 ```
 
 > **Application browser.** Autofill opens a *visible* browser. PulseApply tries, in order: a custom
@@ -96,10 +96,13 @@ npm test               # 109 tests; the UI test needs `npm run build` first, bro
 | **Employer career pages** | Employer site | None — add a careers URL | Pages publishing schema.org `JobPosting` data; robots.txt respected |
 | Remote OK, Remotive, Arbeitnow, Jobicy, Himalayas | Remote boards | None | Queried only for remote searches (Arbeitnow also for Europe) |
 | Brave Search API | Discovery | Optional key | Suggests employer ATS boards near your search (you choose what to add) |
-| LinkedIn, Indeed, ZipRecruiter, Glassdoor | Restricted | — | No authorized API: PulseApply opens a pre-filled search for manual browsing. Never scraped. |
+| **JSearch** (Google for Jobs) | Aggregator | RapidAPI key, free plan ([subscribe](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch/pricing)) | Google Jobs listings, **including jobs posted on LinkedIn, Indeed, Glassdoor, ZipRecruiter** and employer sites, with a link to each site |
+| **SerpApi** (Google Jobs) | Aggregator | Free account key ([sign up](https://serpapi.com/users/sign_up)) | Same Google Jobs coverage; use either or both |
+| LinkedIn, Indeed, ZipRecruiter, Glassdoor | Via Google Jobs + Browse & Save | — | Their listings arrive through JSearch/SerpApi. **Browse & Save** opens the site in a PulseApply window (your own sign-in) with a *Save job* button on every job page. PulseApply never crawls these sites itself. |
 
-**For local (non-remote) searches, connect at least one keyed source** — for U.S. hourly jobs
-(warehouse, retail, food service) CareerOneStop and Adzuna give the best coverage.
+**For the widest coverage connect JSearch or SerpApi** (Google Jobs — includes LinkedIn, Indeed,
+Glassdoor and ZipRecruiter listings). For U.S. hourly jobs (warehouse, retail, food service) add
+Adzuna and CareerOneStop too; duplicates across sources are merged into one card.
 Without them, a local search will correctly report that no source could be queried. Coverage is only
 as wide as the sources you connect — PulseApply does not claim global coverage it doesn’t have.
 
@@ -162,6 +165,13 @@ for history but hidden, and jobs previously marked “applied” become `SUBMISS
 version recorded approval, not an observed submission). Details appear under Settings → Data.
 
 ## Adding jobs the sources did not find
+
+* **Browse & Save** (Sources → LinkedIn/Indeed/ZipRecruiter/Glassdoor, or the buttons under a
+  search) — opens the site's search for your criteria in a PulseApply browser window. Sign in if
+  you like; it is remembered. On any job page click **Save job** (bottom right): PulseApply reads
+  that page (title, employer, location, pay, description) and adds the job. If something can't
+  be read, a small form asks you for it — nothing is guessed. One click saves one job; PulseApply
+  never browses on its own.
 
 * **Add a job** (Results page) — paste a job link: PulseApply reads the page's structured job
   data (schema.org `JobPosting`, the same data Google for Jobs uses; most employer career sites

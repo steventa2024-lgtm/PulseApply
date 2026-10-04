@@ -234,6 +234,8 @@ export const ENV_SECRETS: Record<string, string> = {
   CAREERONESTOP_USER_ID: 'careeronestop.userId',
   CAREERONESTOP_TOKEN: 'careeronestop.token',
   THEMUSE_API_KEY: 'themuse.apiKey',
+  JSEARCH_RAPIDAPI_KEY: 'jsearch.apiKey',
+  SERPAPI_API_KEY: 'serpapi.apiKey',
   BRAVE_SEARCH_API_KEY: 'brave.apiKey',
   TELEGRAM_BOT_TOKEN: 'telegram.botToken'
 }

@@ -12,6 +12,7 @@ import { extractJsonLd, jobPostingToDraft } from '../providers/careerPages'
 import { normalizeDraft } from '../normalization/normalize'
 import { assertPublicUrl, canonicalizeUrl, isPublicHttpUrl } from '../verification/urlSafety'
 import { log } from '../../logger'
+import type { ClippedJob } from '../../../../shared/clip'
 import { OCCUPATION_BY_ID } from '../search/taxonomy'
 
 /**
@@ -151,8 +152,18 @@ export interface InboxStatus {
 const SOURCES = {
   link: { id: 'import-link', name: 'Added by link' },
   manual: { id: 'import-manual', name: 'Added by you' },
-  inbox: { id: 'import-inbox', name: 'Job inbox' }
+  inbox: { id: 'import-inbox', name: 'Job inbox' },
+  clip: { id: 'browse-save', name: 'Saved while browsing' }
 } as const
+
+export type ClipOutcome =
+  | ({ saved: true } & ImportResult)
+  | {
+      saved: false
+      needsDetails: true
+      missing: string[]
+      prefill: { title?: string; company?: string; location?: string; url: string }
+    }
 
 export class JobImportService {
   private watcher: fs.FSWatcher | null = null
@@ -254,6 +265,59 @@ export class JobImportService {
       verified: false,
       note: 'Entered by you; use “Check availability” to confirm it is still open.'
     })
+  }
+
+  /**
+   * Saves the job the user is viewing in the Browse & Save window. Uses the
+   * page's JobPosting data when present, otherwise the visible title, company
+   * and location; anything missing is asked from the user, never guessed.
+   */
+  async importClip(
+    c: ClippedJob,
+    overrides: { title?: string; company?: string; location?: string } = {}
+  ): Promise<ClipOutcome> {
+    if (!isPublicHttpUrl(c.url)) throw new Error('This page has no public link to save')
+    const note = `Saved from ${c.site || 'the web'} while you were viewing it (${new Date().toISOString().slice(0, 10)}).`
+    const ld = c.jsonLd[0]
+    let draft: DraftJob | null = null
+    if (ld && !overrides.title) {
+      draft = jobPostingToDraft(ld, c.url, overrides.company ?? c.company ?? '')
+      if (draft) {
+        draft = {
+          ...draft,
+          sourceJobId: idFor(c.url),
+          sourceUrl: c.url,
+          applyUrl: draft.applyUrl && isPublicHttpUrl(draft.applyUrl) ? draft.applyUrl : c.url,
+          employerDirect: false,
+          descriptionText: draft.descriptionHtml ? undefined : c.description,
+          locationText: draft.locationText || overrides.location || c.location || ''
+        }
+        if (!draft.company) draft = null
+      }
+    }
+    if (!draft) {
+      const fields = {
+        title: overrides.title?.trim() || c.title,
+        company: overrides.company?.trim() || c.company,
+        location: overrides.location?.trim() || c.location
+      }
+      const missing = (['title', 'company', 'location'] as const).filter((k) => !fields[k])
+      if (missing.length)
+        return { saved: false, needsDetails: true, missing, prefill: { ...fields, url: c.url } }
+      draft = simpleToDraft(
+        SimpleJobSchema.parse({
+          ...fields,
+          url: c.url,
+          description: c.description,
+          salary: c.salary,
+          employmentType: c.employmentType,
+          workMode: c.remote ? 'remote' : undefined,
+          foundOn: c.site
+        })
+      )
+    }
+    const res = await this.importDrafts([draft], 'clip', { verified: true, note })
+    return { saved: true, ...res }
   }
 
   // -------------------------------------------------------------------------
