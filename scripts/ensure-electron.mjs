@@ -1,14 +1,20 @@
 /**
- * Makes sure Electron's binary is installed.
+ * Makes sure Electron's binary is installed (runs on `npm install`, before
+ * `npm run dev` and `npm start`).
  *
- * Newer npm versions can skip dependency install scripts (npm "allowScripts"),
- * which leaves node_modules/electron without its binary and makes
- * `npm run dev` fail with "Electron uninstall". The root package's own
- * scripts always run, so this runs Electron's installer explicitly. It is a
- * no-op when the binary is already present.
+ * Two real-world failures this handles:
+ * - Newer npm versions can skip dependency install scripts, so Electron's own
+ *   download never runs.
+ * - Electron's installer can exit "successfully" after unpacking only part of
+ *   the zip (seen on Windows with recent Node versions: only `locales/`).
+ *
+ * The check looks for the executable itself and never deletes a working
+ * install. If Electron's installer does not produce the executable, the zip is
+ * downloaded with Electron's own downloader (checksum-verified) and extracted
+ * with the operating system's unzip tool.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
@@ -23,61 +29,98 @@ try {
   process.exit(1)
 }
 
+const version = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')).version
+const exeName =
+  process.platform === 'win32'
+    ? 'electron.exe'
+    : process.platform === 'darwin'
+      ? 'Electron.app/Contents/MacOS/Electron'
+      : 'electron'
+const distDir = path.join(dir, 'dist')
+const exePath = path.join(distDir, exeName)
 const pathFile = path.join(dir, 'path.txt')
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
-const binaryPresent = (file) =>
-  existsSync(file) && existsSync(path.join(dir, 'dist', readFileSync(file, 'utf8').trim()))
 
-if (binaryPresent(pathFile)) process.exit(0)
-
+/** Writes the two marker files Electron uses to locate its executable. */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- plain JS script
-const runInstaller = (extraEnv) =>
-  spawnSync(process.execPath, [path.join(dir, 'install.js')], {
-    cwd: dir,
-    stdio: 'inherit',
-    env: { ...process.env, ...extraEnv }
+function finalize() {
+  writeFileSync(pathFile, exeName)
+  writeFileSync(path.join(distDir, 'version'), version)
+}
+
+if (existsSync(exePath)) {
+  let current = ''
+  try {
+    current = readFileSync(pathFile, 'utf8')
+  } catch {
+    // missing marker file — rewritten below
+  }
+  if (current !== exeName) finalize()
+  process.exit(0)
+}
+
+console.log(`[ensure-electron] Installing Electron ${version}…`)
+spawnSync(process.execPath, [path.join(dir, 'install.js')], {
+  cwd: dir,
+  stdio: 'inherit',
+  env: process.env
+})
+if (existsSync(exePath)) {
+  finalize()
+  console.log('[ensure-electron] Electron is ready.')
+  process.exit(0)
+}
+
+console.log('[ensure-electron] Electron’s installer did not unpack the app; unpacking it directly…')
+let zipPath
+try {
+  const { downloadArtifact } = createRequire(path.join(dir, 'install.js'))('@electron/get')
+  zipPath = await downloadArtifact({
+    version,
+    artifactName: 'electron',
+    platform: process.platform,
+    arch: process.env.npm_config_arch || process.arch,
+    checksums: JSON.parse(readFileSync(path.join(dir, 'checksums.json'), 'utf8'))
   })
+} catch (err) {
+  console.error(`[ensure-electron] Download failed: ${err.message}`)
+}
 
-console.log('[ensure-electron] Downloading the Electron binary…')
-let res = runInstaller({})
-if (res.status !== 0 || !binaryPresent(pathFile)) {
-  // A half-extracted dist folder or a corrupt cached zip makes the installer
-  // think it is done. Start clean and bypass the download cache once.
-  console.log('[ensure-electron] Retrying with a clean download…')
-  rmSync(path.join(dir, 'dist'), { recursive: true, force: true })
-  rmSync(pathFile, { force: true })
-  res = runInstaller({ force_no_cache: 'true' })
+if (zipPath) {
+  rmSync(distDir, { recursive: true, force: true })
+  mkdirSync(distDir, { recursive: true })
+  const res =
+    process.platform === 'win32'
+      ? spawnSync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${distDir.replace(/'/g, "''")}' -Force`
+          ],
+          { stdio: 'inherit' }
+        )
+      : spawnSync('unzip', ['-o', '-q', zipPath, '-d', distDir], { stdio: 'inherit' })
+  if (res.error) console.error(`[ensure-electron] Unzip failed: ${res.error.message}`)
 }
-if (res.status !== 0 || !binaryPresent(pathFile)) {
-  const distDir = path.join(dir, 'dist')
-  const files = existsSync(distDir) ? readdirSync(distDir) : []
-  console.error(
-    [
-      '',
-      '[ensure-electron] Electron could not be installed.',
-      `  electron version : ${JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')).version}`,
-      `  installer exit   : ${res.status}${res.error ? ` (${res.error.message})` : ''}`,
-      `  path.txt         : ${existsSync(pathFile) ? readFileSync(pathFile, 'utf8') : 'missing'}`,
-      `  dist folder      : ${files.length} file(s)${files.length ? ` — ${files.slice(0, 6).join(', ')}` : ''}`,
-      `  settings         : ${
-        [
-          'ELECTRON_SKIP_BINARY_DOWNLOAD',
-          'ELECTRON_OVERRIDE_DIST_PATH',
-          'ELECTRON_MIRROR',
-          'electron_config_cache',
-          'HTTPS_PROXY'
-        ]
-          .filter((k) => process.env[k] !== undefined)
-          .map((k) => `${k} is set`)
-          .join(', ') || 'none'
-      }`,
-      '',
-      'If the dist folder has files but no electron.exe, your antivirus probably removed it',
-      '(Windows Security → Virus & threat protection → Protection history).',
-      'Manual install: see "Electron failed to install" in README.md.',
-      ''
-    ].join('\n')
-  )
-  process.exit(1)
+
+if (existsSync(exePath)) {
+  finalize()
+  console.log('[ensure-electron] Electron is ready.')
+  process.exit(0)
 }
-console.log('[ensure-electron] Electron is ready.')
+
+console.error(
+  [
+    '',
+    '[ensure-electron] Electron could not be installed.',
+    `  expected file : ${exePath}`,
+    `  downloaded zip: ${zipPath ?? 'none'}`,
+    '',
+    'If the zip was downloaded but the .exe is missing after unpacking, your antivirus probably',
+    'removed it (Windows Security → Virus & threat protection → Protection history).',
+    'Manual install: see "Electron failed to install" in README.md.',
+    ''
+  ].join('\n')
+)
+process.exit(1)
