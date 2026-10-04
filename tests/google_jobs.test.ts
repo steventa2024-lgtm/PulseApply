@@ -349,17 +349,19 @@ describe('provider errors are explained and recovered', () => {
     expect(r.sample[0]).toContain('Barista — Bean Fixture')
   })
 
-  it('JSearch retries with basic parameters, and the Test button reports real errors', async () => {
-    let calls = 0
+  it('JSearch finds its moved endpoint, accepts a pasted one, and the Test button reports real errors', async () => {
+    const paths: string[] = []
     svc = (
       await makeServices({
         fetchImpl: fakeFetch([
-          (u) => {
-            if (u.hostname !== 'jsearch.p.rapidapi.com') return undefined
-            calls++
-            return u.searchParams.get('radius')
-              ? json({ message: "Endpoint '/search' does not exist" }, 404)
-              : json(JSEARCH)
+          (u, init) => {
+            if (!u.hostname.endsWith('rapidapi.com')) return undefined
+            paths.push(
+              `${(init?.headers as Record<string, string>)['x-rapidapi-host']}${u.pathname}`
+            )
+            return u.pathname === '/search-v2' || u.pathname === '/custom/jobs'
+              ? json(JSEARCH)
+              : json({ message: `Endpoint '${u.pathname}' does not exist` }, 404)
           }
         ])
       })
@@ -372,7 +374,12 @@ describe('provider errors are explained and recovered', () => {
     })
     const ok = await svc.search.testProvider('jsearch')
     expect(ok).toMatchObject({ ok: true, count: 3 })
-    expect(calls).toBe(2)
+    expect(paths).toEqual(['jsearch.p.rapidapi.com/search', 'jsearch.p.rapidapi.com/search-v2'])
+
+    paths.length = 0
+    svc.store.secrets.set('jsearch.endpoint', 'https://jsearch2.p.rapidapi.com/custom/jobs?query=x')
+    expect((await svc.search.testProvider('jsearch')).ok).toBe(true)
+    expect(paths[0]).toBe('jsearch2.p.rapidapi.com/custom/jobs')
     await svc.shutdown()
 
     svc = (

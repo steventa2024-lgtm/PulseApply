@@ -115,6 +115,30 @@ const JS_PERIOD: Record<string, SalaryPeriod> = {
   YEAR: 'year'
 }
 
+const JSEARCH_DEFAULT_PATHS = ['/search', '/search-v2', '/v2/search', '/job-search']
+let workingJSearchEndpoint: string | undefined
+
+/** Endpoints to try, in order: the user's pasted URL, the last one that worked, the known ones. */
+export function jsearchEndpoints(custom: string | undefined): URL[] {
+  const out: URL[] = []
+  const add = (raw: string | undefined): void => {
+    if (!raw) return
+    try {
+      const u = new URL(raw.trim())
+      if (u.protocol !== 'https:' || !/(^|\.)rapidapi\.com$/.test(u.hostname)) return
+      u.search = ''
+      u.hash = ''
+      if (!out.some((x) => x.href === u.href)) out.push(u)
+    } catch {
+      // ignore invalid URL
+    }
+  }
+  add(custom)
+  add(workingJSearchEndpoint)
+  for (const p of JSEARCH_DEFAULT_PATHS) add(`https://jsearch.p.rapidapi.com${p}`)
+  return out
+}
+
 export const jsearchProvider: JobProvider = {
   id: 'jsearch',
   name: 'JSearch (Google for Jobs)',
@@ -134,6 +158,13 @@ export const jsearchProvider: JobProvider = {
       secret: false,
       required: false,
       help: 'Each page returns up to 10 jobs and costs one request from your quota.'
+    },
+    {
+      key: 'jsearch.endpoint',
+      label: 'Endpoint URL (optional)',
+      secret: false,
+      required: false,
+      help: 'Only if JSearch reports that its endpoint does not exist: paste the request URL from the code example on RapidAPI (e.g. https://jsearch.p.rapidapi.com/search?query=…).'
     }
   ],
   defaultEnabled: true,
@@ -160,30 +191,46 @@ export const jsearchProvider: JobProvider = {
     if (remoteOnly) params.set('work_from_home', 'true')
     if (loc && q.radiusKm && !remoteOnly)
       params.set('radius', String(Math.max(1, Math.round(q.radiusKm))))
-    const call = (
-      p: URLSearchParams
-    ): Promise<{ status?: string; data?: unknown[]; message?: string }> =>
-      ctx.http.json({
-        url: `https://jsearch.p.rapidapi.com/search?${p}`,
+    type JSearchResponse = { status?: string; data?: unknown[]; message?: string }
+    const endpoints = jsearchEndpoints(ctx.secret('jsearch.endpoint'))
+    const call = (endpoint: URL, p: URLSearchParams): Promise<JSearchResponse> =>
+      ctx.http.json<JSearchResponse>({
+        url: `${endpoint.origin}${endpoint.pathname}?${p}`,
         headers: {
           'x-rapidapi-key': ctx.secret('jsearch.apiKey')!,
-          'x-rapidapi-host': 'jsearch.p.rapidapi.com'
+          'x-rapidapi-host': endpoint.hostname
         },
         signal: ctx.signal,
-        timeoutMs: this.timeoutMs
+        timeoutMs: this.timeoutMs,
+        retries: 1
       })
-    let data: { status?: string; data?: unknown[]; message?: string }
-    try {
-      data = await call(params)
-    } catch (err) {
-      // Some plan/endpoint combinations reject optional filters; retry with the basics.
-      if (!(err instanceof HttpError) || ![400, 404, 422].includes(err.status)) throw err
-      const basic = new URLSearchParams({
-        query: params.get('query')!,
-        page: '1',
-        num_pages: '1'
-      })
-      data = await call(basic)
+    const basic = new URLSearchParams({ query: params.get('query')!, page: '1', num_pages: '1' })
+    let data: JSearchResponse | undefined
+    let lastError: unknown
+    // JSearch has moved its search endpoint before; try the known addresses
+    // (or the one the user pasted from RapidAPI), with and without optional filters.
+    outer: for (const endpoint of endpoints) {
+      for (const p of [params, basic]) {
+        try {
+          data = await call(endpoint, p)
+          // Remember a working default address (a pasted one is always tried first anyway).
+          if (endpoint.hostname === 'jsearch.p.rapidapi.com') workingJSearchEndpoint = endpoint.href
+          break outer
+        } catch (err) {
+          lastError = err
+          if (!(err instanceof HttpError)) throw err
+          if (err.status === 404 && /does not exist|not found/i.test(err.message)) continue outer
+          if (![400, 422].includes(err.status)) throw err
+        }
+      }
+    }
+    if (!data) {
+      const msg = lastError instanceof Error ? lastError.message : 'no response'
+      throw new Error(
+        /does not exist/i.test(msg)
+          ? `${msg}. JSearch changed its address: open the JSearch page on RapidAPI, copy the request URL from its code example, and paste it into “Endpoint URL”.`
+          : msg
+      )
     }
     if (!Array.isArray(data?.data)) throw new Error(data?.message ?? 'Unexpected JSearch response')
     const out: RawRecord[] = []
