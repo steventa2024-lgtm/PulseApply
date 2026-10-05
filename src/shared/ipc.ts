@@ -156,6 +156,19 @@ export interface IpcContract {
     },
     JobImportResult
   ]
+  'tracker:list': [void, ScoredJob[]]
+  'tracker:update': [
+    {
+      jobId: string
+      status?: import('./types').TrackStatus
+      notes?: string
+      appliedAt?: string
+      followUpAt?: string
+      contact?: string
+    },
+    ScoredJob | null
+  ]
+  'tracker:remove': [{ jobId: string }, ScoredJob | null]
   'jobs:inbox-status': [void, JobInboxStatus]
   'jobs:inbox-scan': [void, JobInboxStatus]
   'jobs:inbox-open': [void, boolean]
@@ -291,6 +304,7 @@ export interface IpcEvents {
   'telegram:status': TelegramStatus
   'scheduler:updated': null
   'jobs:changed': null
+  'app:navigate': string
 }
 export type IpcEvent = keyof IpcEvents
 
@@ -299,7 +313,8 @@ export const EVENT_CHANNELS: IpcEvent[] = [
   'applications:updated',
   'telegram:status',
   'scheduler:updated',
-  'jobs:changed'
+  'jobs:changed',
+  'app:navigate'
 ]
 
 export const INVOKE_CHANNELS: IpcChannel[] = [
@@ -337,6 +352,9 @@ export const INVOKE_CHANNELS: IpcChannel[] = [
   'jobs:open-external',
   'jobs:import-url',
   'jobs:import-manual',
+  'tracker:list',
+  'tracker:update',
+  'tracker:remove',
   'jobs:inbox-status',
   'jobs:inbox-scan',
   'jobs:inbox-open',

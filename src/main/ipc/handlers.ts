@@ -429,6 +429,7 @@ const SettingsPatch = z
       })
       .partial(),
     staleAfterDays: z.number().int().min(1).max(365),
+    notifications: z.object({ desktop: z.boolean() }),
     contactEmailForApis: z.string().email().max(200).optional()
   })
   .partial()
@@ -500,6 +501,21 @@ const schemas: { [C in IpcChannel]: z.ZodType<IpcPayload<C>> } = {
     employmentType: z.string().max(60).optional(),
     workMode: z.enum(['onsite', 'hybrid', 'remote']).optional()
   }),
+  'tracker:list': z.undefined(),
+  'tracker:update': z.object({
+    jobId: id,
+    status: z
+      .enum(['interested', 'applied', 'interviewing', 'offer', 'accepted', 'rejected', 'withdrawn'])
+      .optional(),
+    notes: z.string().max(5000).optional(),
+    appliedAt: z.string().max(40).optional(),
+    followUpAt: z
+      .string()
+      .regex(/^(\d{4}-\d{2}-\d{2})?$/)
+      .optional(),
+    contact: z.string().max(300).optional()
+  }),
+  'tracker:remove': z.object({ jobId: id }),
   'jobs:inbox-status': z.undefined(),
   'jobs:inbox-scan': z.undefined(),
   'jobs:inbox-open': z.undefined(),
@@ -821,6 +837,24 @@ export function createHandlers(
       if (!target || !isPublicHttpUrl(target)) throw new Error('Nothing to open')
       host.openJobBrowser(target)
       return true
+    },
+    'tracker:list': async () =>
+      store.jobs.list({
+        ids: store.tracking.trackedJobIds(),
+        view: 'archive',
+        limit: 5000,
+        includeDemo: store.settings.get().demoMode
+      }),
+    'tracker:update': async ({ jobId, ...patch }) => {
+      if (!store.jobs.exists(jobId)) throw new Error('Job not found')
+      store.tracking.set(jobId, patch)
+      jobsChanged()
+      return store.jobs.get(jobId) ?? null
+    },
+    'tracker:remove': async ({ jobId }) => {
+      store.tracking.remove(jobId)
+      jobsChanged()
+      return store.jobs.get(jobId) ?? null
     },
     'jobs:inbox-status': async () => svc.imports.status(),
     'jobs:inbox-scan': async () => {

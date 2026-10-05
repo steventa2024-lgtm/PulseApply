@@ -12,6 +12,8 @@ import type {
 } from '../../../shared/types'
 import type { AppDb } from './database'
 import { json } from './database'
+import { TrackingRepo } from './trackingRepo'
+import { mergeApplyOptions } from '../jobs/normalization/applyOptions'
 
 interface JobRow {
   id: string
@@ -25,6 +27,13 @@ interface JobRow {
   last_seen_at: string
   verification_status: string
   elig: string | null
+  t_status: string | null
+  t_notes: string | null
+  t_applied_at: string | null
+  t_follow_up_at: string | null
+  t_contact: string | null
+  t_history: string | null
+  t_updated_at: string | null
   app_id: string | null
   app_state: string | null
 }
@@ -67,8 +76,10 @@ const SELECT = `
   SELECT j.id, j.data, j.match, j.relevance, j.geo, j.saved, j.dismissed, j.discovered_at, j.last_seen_at,
          j.verification_status, j.elig,
          (SELECT a.id FROM applications a WHERE a.job_id = j.id ORDER BY a.created_at DESC LIMIT 1) AS app_id,
-         (SELECT a.state FROM applications a WHERE a.job_id = j.id ORDER BY a.created_at DESC LIMIT 1) AS app_state
-  FROM jobs j`
+         (SELECT a.state FROM applications a WHERE a.job_id = j.id ORDER BY a.created_at DESC LIMIT 1) AS app_state,
+         t.status AS t_status, t.notes AS t_notes, t.applied_at AS t_applied_at, t.follow_up_at AS t_follow_up_at,
+         t.contact AS t_contact, t.history AS t_history, t.updated_at AS t_updated_at
+  FROM jobs j LEFT JOIN job_tracking t ON t.job_id = j.id`
 
 function mergeSources(a: JobSourceRecord[], b: JobSourceRecord[]): JobSourceRecord[] {
   const map = new Map<string, JobSourceRecord>()
@@ -93,6 +104,17 @@ export class JobsRepo {
       state: {
         saved: !!row.saved,
         dismissed: !!row.dismissed,
+        tracking: row.t_status
+          ? TrackingRepo.fromRow({
+              status: row.t_status,
+              notes: row.t_notes ?? '',
+              applied_at: row.t_applied_at,
+              follow_up_at: row.t_follow_up_at,
+              contact: row.t_contact,
+              history: row.t_history ?? '[]',
+              updated_at: row.t_updated_at ?? ''
+            })
+          : undefined,
         applicationId: row.app_id ?? undefined,
         applicationState: (row.app_state as ApplicationState) ?? undefined
       }
@@ -127,7 +149,8 @@ export class JobsRepo {
           data = {
             ...base,
             discoveredAt: existing.discovered_at,
-            sources: mergeSources(prev.sources ?? [], base.sources)
+            sources: mergeSources(prev.sources ?? [], base.sources),
+            applyOptions: mergeApplyOptions(base.applyOptions, prev.applyOptions)
           }
           this.db.run(
             `UPDATE jobs SET canonical_key = ?, data = ?, title = ?, company = ?, source = ?, posted_at = ?,

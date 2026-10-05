@@ -126,6 +126,13 @@ export class HttpClient {
     }
   ) {}
 
+  private requestListeners: ((url: string) => void)[] = []
+
+  /** Called for every request actually sent over the network (used for quota counting). */
+  onRequest(listener: (url: string) => void): void {
+    this.requestListeners.push(listener)
+  }
+
   private get fetchImpl(): typeof fetch {
     return this.opts.fetchImpl ?? fetch
   }
@@ -164,6 +171,13 @@ export class HttpClient {
       const timeout = AbortSignal.timeout(req.timeoutMs ?? 15_000)
       const signal = req.signal ? AbortSignal.any([req.signal, timeout]) : timeout
       let res: Response
+      for (const l of this.requestListeners) {
+        try {
+          l(req.url)
+        } catch {
+          // listeners never break requests
+        }
+      }
       try {
         res = await this.fetchImpl(req.url, {
           method: req.method ?? 'GET',

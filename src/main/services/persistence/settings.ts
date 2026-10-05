@@ -9,7 +9,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ollama: { enabled: true, baseUrl: 'http://127.0.0.1:11434', model: 'nomic-embed-text' },
   browser: {},
   matching: { weights: { ...DEFAULT_WEIGHTS }, strongThreshold: 75 },
-  staleAfterDays: 21
+  staleAfterDays: 21,
+  notifications: { desktop: true }
 }
 
 function deepMerge<T>(base: T, patch: unknown): T {

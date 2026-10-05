@@ -54,6 +54,9 @@ export class ApplicationManager {
     patch: Parameters<Store['applications']['transition']>[3] = {}
   ): ApplicationRecord {
     const app = this.store.applications.transition(id, to, message, patch)
+    // A submitted (or user-reported) application moves the job to "Applied" on the tracker.
+    if (to === 'SUBMITTED' || to === 'SUBMISSION_UNVERIFIED')
+      this.store.tracking.markApplied(app.jobId)
     this.deps.emit(app)
     return app
   }

@@ -86,6 +86,8 @@ export interface DraftJob {
   ats?: { provider: ApplicationSupport; board?: string; requisitionId?: string; postingId?: string }
   countryHint?: string
   extraNotes?: string[]
+  /** Other places the same posting can be applied to (from aggregators like Google Jobs). */
+  applyOptions?: { label: string; url: string; direct?: boolean }[]
 }
 
 export interface ProviderSupport {
@@ -113,6 +115,8 @@ export interface JobProvider {
   manualSearchUrlTemplate?: string
   /** True for providers PulseApply never fetches from automatically. */
   manualOnly?: boolean
+  /** Paid/free-tier APIs with a monthly request allowance (limit editable by the user). */
+  monthlyQuota?: { limitKey: string; defaultLimit: number }
   supports(query: ProviderQuery): ProviderSupport
   isConfigured(secret: (key: string) => string | undefined): boolean
   fetch(query: ProviderQuery, ctx: ProviderContext): Promise<RawRecord[]>

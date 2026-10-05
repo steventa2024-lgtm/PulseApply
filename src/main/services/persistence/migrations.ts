@@ -301,5 +301,29 @@ export const MIGRATIONS: Migration[] = [
         PRIMARY KEY (document_id, version)
       );
     `
+  },
+  {
+    version: 3,
+    name: 'job tracking for manual applications, API usage',
+    sql: `
+      CREATE TABLE job_tracking (
+        job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+        status TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        applied_at TEXT,
+        follow_up_at TEXT,
+        contact TEXT,
+        history TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_tracking_status ON job_tracking(status);
+
+      CREATE TABLE provider_usage (
+        provider_id TEXT NOT NULL,
+        month TEXT NOT NULL,
+        requests INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (provider_id, month)
+      );
+    `
   }
 ]

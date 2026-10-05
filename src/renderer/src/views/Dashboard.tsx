@@ -131,8 +131,28 @@ export default function Dashboard({
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
-        <Card title="Needs your attention" subtitle="Applications waiting on you">
-          {attention.length === 0 ? (
+        <Card title="Needs your attention" subtitle="Follow-ups and applications waiting on you">
+          {(stats?.followUpsDue.length ?? 0) > 0 && (
+            <ul className="mb-3 space-y-1.5" data-testid="followups">
+              {stats!.followUpsDue.slice(0, 5).map((f) => (
+                <li
+                  key={f.jobId}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-white">Follow up: {f.title}</p>
+                    <p className="truncate text-[11px] text-slate-400">
+                      {f.company} · due {f.followUpAt}
+                    </p>
+                  </div>
+                  <Button size="sm" onClick={() => go('tracker')}>
+                    Open tracker
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {attention.length === 0 && !(stats?.followUpsDue.length ?? 0) ? (
             <p className="flex items-center gap-2 text-xs text-slate-500">
               <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Nothing waiting.
             </p>

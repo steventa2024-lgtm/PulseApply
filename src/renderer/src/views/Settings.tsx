@@ -142,6 +142,11 @@ export default function Settings({
               onChange={(v) => void save({ onlineGeocoding: v })}
               label="Online geocoding fallback (OpenStreetMap Nominatim) for places not in the offline gazetteer"
             />
+            <Toggle
+              checked={s.notifications?.desktop !== false}
+              onChange={(v) => void save({ notifications: { desktop: v } })}
+              label="Desktop notification when a scheduled search finds new matching jobs"
+            />
             <p className="text-[11px] text-slate-500">
               The offline gazetteer (GeoNames, CC BY 4.0) covers 112,000+ cities worldwide and US
               ZIP codes. Online lookups are cached and limited to 1 per second.

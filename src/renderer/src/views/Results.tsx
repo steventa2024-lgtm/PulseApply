@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   Bookmark,
   BookmarkCheck,
+  CheckCircle2,
   Briefcase,
   ExternalLink,
   EyeOff,
@@ -31,6 +32,7 @@ import {
   EMPLOYMENT_LABEL,
   EXCLUSION_LABEL,
   GEO_LABEL,
+  TRACK_LABEL,
   VERIFICATION_LABEL,
   formatSalary,
   timeAgo
@@ -367,6 +369,10 @@ export default function Results(): React.JSX.Element {
               onOpen={() => setSelected(j)}
               onSave={() => void save(j)}
               onDismiss={() => void dismiss(j)}
+              onTracked={(t) => {
+                replace(t)
+                if (t) toast('Marked as applied — follow-up set for one week from today', 'success')
+              }}
             />
           ))}
           {jobs.length > shown && (
@@ -524,16 +530,21 @@ function ScorePill({ job }: { job: ScoredJob }): React.JSX.Element {
   )
 }
 
+const markApplied = (jobId: string): Promise<ScoredJob | null> =>
+  call('tracker:update', { jobId, status: 'applied' })
+
 function JobCard({
   job,
   onOpen,
   onSave,
-  onDismiss
+  onDismiss,
+  onTracked
 }: {
   job: ScoredJob
   onOpen: () => void
   onSave: () => void
   onDismiss: () => void
+  onTracked: (j: ScoredJob | null) => void
 }): React.JSX.Element {
   const v = VERIFICATION_LABEL[job.verificationStatus]
   const { go } = useApp()
@@ -551,6 +562,9 @@ function JobCard({
                 : job.sources[0]?.providerName}
             </Badge>
             {job.isNew && <Badge tone="violet">New</Badge>}
+            {job.state.tracking && (
+              <Badge tone="cyan">{TRACK_LABEL[job.state.tracking.status]}</Badge>
+            )}
             {job.eligibility && job.eligibility.status !== 'eligible' && (
               <Badge
                 tone={job.eligibility.status === 'review' ? 'amber' : 'red'}
@@ -640,6 +654,17 @@ function JobCard({
         >
           {job.state.saved ? 'Saved' : 'Save'}
         </Button>
+        {!job.state.tracking || job.state.tracking.status === 'interested' ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<CheckCircle2 className="h-3 w-3" />}
+            onClick={() => void markApplied(job.id).then(onTracked)}
+            title="Record that you applied yourself; it moves to the Tracker with a follow-up date"
+          >
+            I applied
+          </Button>
+        ) : null}
         <Button
           size="sm"
           icon={<ExternalLink className="h-3 w-3" />}
@@ -877,6 +902,32 @@ function JobDetail({
             <p className="mb-4 rounded-lg border border-white/10 p-3 text-xs text-slate-400">
               Upload a resume on the Profile page to see how this job matches your qualifications.
             </p>
+          )}
+
+          {(job.applyOptions?.length ?? 0) > 0 && (
+            <Card
+              className="mb-4"
+              title="Where to apply"
+              subtitle="Every place this job is posted. The employer’s own site is usually the best place to apply."
+            >
+              <ul className="space-y-1.5" data-testid="apply-options">
+                {job.applyOptions!.map((o) => (
+                  <li key={o.url} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="flex min-w-0 items-center gap-1.5 text-slate-200">
+                      <span className="truncate">{o.label}</span>
+                      {o.direct && <Badge tone="green">employer site</Badge>}
+                    </span>
+                    <Button
+                      size="sm"
+                      icon={<ExternalLink className="h-3 w-3" />}
+                      onClick={() => void call('jobs:open-external', { url: o.url })}
+                    >
+                      Apply here
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
           )}
 
           <Card

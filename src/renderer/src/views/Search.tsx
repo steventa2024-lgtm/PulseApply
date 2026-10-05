@@ -130,7 +130,7 @@ function SaveSearchForm({
   const [name, setName] = useState(
     () => [criteria.query, criteria.location].filter(Boolean).join(' — ') || 'My search'
   )
-  const [interval, setIntervalMin] = useState(60)
+  const [interval, setIntervalMin] = useState(240)
   const [notify, setNotify] = useState(true)
   const [minScore, setMinScore] = useState(60)
   const [busy, setBusy] = useState(false)
@@ -208,8 +208,10 @@ function SaveSearchForm({
         </div>
         <Toggle checked={notify} onChange={setNotify} label="Send new matching jobs to Telegram" />
         <p className="text-[11px] text-slate-500">
-          Only jobs not previously sent for this search are notified. Unchanged results never
-          trigger a repeat message.
+          You get a desktop notification (and a Telegram message, if enabled) only for jobs not seen
+          before by this search. Google Jobs sources (JSearch, SerpApi) are re-queried at most every
+          6 hours per occupation to save your free monthly allowance — the Sources page shows how
+          much is left.
         </p>
       </div>
     </Modal>

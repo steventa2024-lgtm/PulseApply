@@ -5,6 +5,7 @@ import {
   Briefcase,
   Database,
   FilePen,
+  KanbanSquare,
   FileText,
   LayoutDashboard,
   Layers,
@@ -22,6 +23,7 @@ import type { AppInfo, DashboardStats } from '../../shared/types'
 import Dashboard from './views/Dashboard'
 import Search from './views/Search'
 import Results from './views/Results'
+import Tracker from './views/Tracker'
 import Applications from './views/Applications'
 import Automation from './views/Automation'
 import Sources from './views/Sources'
@@ -33,6 +35,7 @@ const NAV: { id: View; label: string; icon: typeof Layers }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'search', label: 'Search', icon: SearchIcon },
   { id: 'results', label: 'Results', icon: Layers },
+  { id: 'tracker', label: 'Tracker', icon: KanbanSquare },
   { id: 'applications', label: 'Applications', icon: Briefcase },
   { id: 'automation', label: 'Automation', icon: Bell },
   { id: 'sources', label: 'Sources', icon: Database },
@@ -70,10 +73,14 @@ function Shell(): React.JSX.Element {
     refreshCounters()
   })
   useEvent('telegram:status', refreshStats)
+  useEvent('app:navigate', (v) => {
+    if (NAV.some((n) => n.id === v)) go(v as View)
+  })
 
   // Sidebar badges use the same data the pages render (no separate counters that can drift).
   const badges: Partial<Record<View, number>> = {
     results: counters?.eligible ?? 0,
+    tracker: stats?.followUpsDue.length ?? 0,
     applications: stats?.applicationsInProgress ?? 0
   }
 
@@ -154,6 +161,7 @@ function Shell(): React.JSX.Element {
             {view === 'dashboard' && <Dashboard stats={stats} onRefresh={refreshStats} />}
             {view === 'search' && <Search />}
             {view === 'results' && <Results />}
+            {view === 'tracker' && <Tracker />}
             {view === 'applications' && <Applications />}
             {view === 'automation' && <Automation />}
             {view === 'sources' && <Sources />}

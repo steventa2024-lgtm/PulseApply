@@ -8,6 +8,7 @@ import { EmployersRepo, ProvidersRepo } from './providersRepo'
 import { TelegramRepo } from './telegramRepo'
 import { CandidateRepo } from './candidateRepo'
 import { ResumeDocsRepo } from './resumeDocsRepo'
+import { TrackingRepo } from './trackingRepo'
 
 export interface Store {
   db: AppDb
@@ -21,6 +22,7 @@ export interface Store {
   telegram: TelegramRepo
   candidate: CandidateRepo
   resumeDocs: ResumeDocsRepo
+  tracking: TrackingRepo
 }
 
 export async function openStore(filePath: string | null, cipher: SecretCipher): Promise<Store> {
@@ -37,6 +39,7 @@ export async function openStore(filePath: string | null, cipher: SecretCipher): 
     employers: new EmployersRepo(db),
     telegram: new TelegramRepo(db),
     candidate: new CandidateRepo(db, secrets),
-    resumeDocs: new ResumeDocsRepo(db)
+    resumeDocs: new ResumeDocsRepo(db),
+    tracking: new TrackingRepo(db)
   }
 }

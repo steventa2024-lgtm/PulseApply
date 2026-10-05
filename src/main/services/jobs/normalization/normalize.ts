@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { isJobBoard, mergeApplyOptions, siteLabel } from './applyOptions'
 import { z } from 'zod'
 import type {
   EmploymentType,
@@ -416,6 +417,22 @@ export function normalizeDraft(draft: DraftJob, opts: NormalizeOptions): Normali
         employerDirect: draft.employerDirect
       }
     ],
+    applyOptions: mergeApplyOptions(
+      (draft.applyOptions ?? []).map((o) => ({
+        label: o.label || siteLabel(o.url),
+        url: o.url,
+        direct: o.direct ?? !isJobBoard(o.url)
+      })),
+      applyUrl
+        ? [
+            {
+              label: draft.employerDirect ? draft.company : siteLabel(applyUrl, opts.providerName),
+              url: applyUrl,
+              direct: draft.employerDirect || !isJobBoard(applyUrl)
+            }
+          ]
+        : undefined
+    ),
     applicationSupport: applicationSupportFor(applyUrl, sourceUrl)
   }
   const check = NormalizedJobSchema.safeParse(job)

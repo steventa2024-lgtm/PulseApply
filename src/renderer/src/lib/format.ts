@@ -1,4 +1,5 @@
 import type {
+  TrackStatus,
   ApplicationState,
   EmploymentType,
   GeoEligibility,
@@ -155,4 +156,14 @@ export const EXCLUSION_LABEL: Record<string, string> = {
   work_mode: 'work mode not selected',
   missing_required_skill: 'missing a required skill',
   below_minimum_score: 'below your minimum match score'
+}
+
+export const TRACK_LABEL: Record<TrackStatus, string> = {
+  interested: 'Interested',
+  applied: 'Applied',
+  interviewing: 'Interviewing',
+  offer: 'Offer',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+  withdrawn: 'Withdrawn'
 }

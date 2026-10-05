@@ -398,3 +398,81 @@ describe('provider errors are explained and recovered', () => {
     expect(bad.message).toBe('HTTP 403: You are not subscribed to this API.')
   })
 })
+
+describe('apply options', () => {
+  it('keeps every place a job is posted, employer site first, merged across sources', async () => {
+    const { mergeApplyOptions } =
+      await import('../src/main/services/jobs/normalization/applyOptions')
+    const merged = mergeApplyOptions(
+      [
+        { label: 'LinkedIn', url: 'https://www.linkedin.com/jobs/view/1?trk=abc', direct: false },
+        { label: 'Acme', url: 'https://careers.acme.example.com/7', direct: true }
+      ],
+      [
+        { label: 'LinkedIn', url: 'https://www.linkedin.com/jobs/view/1', direct: false },
+        { label: 'Bad', url: 'http://127.0.0.1/x', direct: true }
+      ]
+    )!
+    expect(merged.map((o) => o.label)).toEqual(['Acme', 'LinkedIn'])
+  })
+
+  it('JSearch jobs carry their apply options into storage', async () => {
+    svc = (
+      await makeServices({
+        fetchImpl: fakeFetch([
+          (u) => (u.hostname === 'jsearch.p.rapidapi.com' ? json(JSEARCH) : undefined)
+        ])
+      })
+    ).svc
+    svc.store.secrets.set('jsearch.apiKey', 'k')
+    const c = {
+      query: 'Warehouse Associate',
+      location: 'Los Angeles, CA',
+      radius: 25,
+      providerIds: ['jsearch']
+    }
+    await svc.criteria.setActive(c)
+    const res = await svc.search.run(c, { trigger: 'manual' })
+    const stored = svc.store.jobs.get(res.jobs[0].id)!
+    expect(stored.applyOptions!.map((o) => [o.label, o.direct])).toEqual([
+      ['Fixture Freight Careers', true],
+      ['LinkedIn', false],
+      ['Indeed', false]
+    ])
+  })
+})
+
+describe('monthly API allowance', () => {
+  it('counts real requests, shows usage, and stops at the limit', async () => {
+    svc = (
+      await makeServices({
+        fetchImpl: fakeFetch([
+          (u) => (u.hostname === 'jsearch.p.rapidapi.com' ? json(JSEARCH) : undefined)
+        ])
+      })
+    ).svc
+    svc.store.secrets.set('jsearch.apiKey', 'k')
+    svc.store.secrets.set('jsearch.monthlyLimit', '2')
+    const c = {
+      query: 'Warehouse Associate',
+      location: 'Los Angeles, CA',
+      radius: 25,
+      providerIds: ['jsearch']
+    }
+    await svc.criteria.setActive(c)
+    await svc.search.run(c, { trigger: 'manual' })
+    let info = svc.search.providerInfos().find((p) => p.id === 'jsearch')!
+    expect(info.usage).toMatchObject({ used: 1, limit: 2 })
+    // Cached results do not use the allowance.
+    await svc.search.run(c, { trigger: 'manual' })
+    expect(svc.search.providerInfos().find((p) => p.id === 'jsearch')!.usage!.used).toBe(1)
+    await svc.search.testProvider('jsearch')
+    info = svc.search.providerInfos().find((p) => p.id === 'jsearch')!
+    expect(info).toMatchObject({ status: 'LIMITED', usage: { used: 2, limit: 2 } })
+    const res = await svc.search.run({ ...c, query: 'Barista' }, { trigger: 'manual' })
+    expect(res.stats.providers.find((p) => p.providerId === 'jsearch')).toMatchObject({
+      status: 'skipped',
+      reason: 'Monthly limit reached (2/2)'
+    })
+  })
+})

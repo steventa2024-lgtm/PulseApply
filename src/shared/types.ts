@@ -106,6 +106,14 @@ export interface JobSourceRecord {
   employerDirect: boolean
 }
 
+export interface ApplyOption {
+  /** Site name, e.g. "LinkedIn", "Indeed", "Acme Careers". */
+  label: string
+  url: string
+  /** True for the employer's own site / applicant-tracking system. */
+  direct: boolean
+}
+
 export interface OccupationTag {
   id: string
   label: string
@@ -164,6 +172,8 @@ export interface NormalizedJob {
   occupation?: OccupationTag
   inferredFields: string[]
   sources: JobSourceRecord[]
+  /** Every place this job can be applied to, as reported by the sources (employer site first). */
+  applyOptions?: ApplyOption[]
   applicationSupport: ApplicationSupport
   isDemo?: boolean
 }
@@ -318,9 +328,25 @@ export interface ScoredJob extends NormalizedJob {
   isNew?: boolean
 }
 
+/** Where the user is with a job they are pursuing (tracked manually or by autofill). */
+export type TrackStatus =
+  'interested' | 'applied' | 'interviewing' | 'offer' | 'accepted' | 'rejected' | 'withdrawn'
+
+export interface JobTracking {
+  status: TrackStatus
+  notes: string
+  appliedAt?: string
+  /** Date to follow up with the employer (YYYY-MM-DD). */
+  followUpAt?: string
+  contact?: string
+  updatedAt: string
+  history: { at: string; status: TrackStatus }[]
+}
+
 export interface JobUserState {
   saved: boolean
   dismissed: boolean
+  tracking?: JobTracking
   applicationId?: string
   applicationState?: ApplicationState
 }
@@ -444,6 +470,8 @@ export interface ProviderInfo {
   lastCount?: number
   rateLimitedUntil?: string
   manualSearchUrlTemplate?: string
+  /** Requests sent this month, for APIs with a monthly allowance. */
+  usage?: { used: number; limit: number; month: string }
 }
 
 export type AtsProvider = 'greenhouse' | 'lever' | 'ashby' | 'smartrecruiters' | 'jsonld'
@@ -703,6 +731,8 @@ export interface AppSettings {
   matching: { weights: Record<string, number>; strongThreshold: number }
   staleAfterDays: number
   contactEmailForApis?: string
+  /** Desktop notification when a scheduled search finds new matching jobs. */
+  notifications: { desktop: boolean }
 }
 
 export interface SemanticStatus {
@@ -714,6 +744,16 @@ export interface SemanticStatus {
 
 export interface DashboardStats {
   counters: JobCounters
+  /** Jobs on the tracker by status. */
+  tracking: Partial<Record<TrackStatus, number>>
+  /** Follow-ups due today or earlier. */
+  followUpsDue: {
+    jobId: string
+    title: string
+    company: string
+    followUpAt: string
+    status: TrackStatus
+  }[]
   totalJobs: number
   newJobs: number
   verifiedJobs: number

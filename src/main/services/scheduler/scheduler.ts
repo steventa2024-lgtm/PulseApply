@@ -29,6 +29,8 @@ export class Scheduler {
       search: SearchService
       telegram?: TelegramService
       onUpdate?: () => void
+      /** Desktop notification for new matching jobs (Electron only). */
+      notifyNewJobs?: (searchName: string, jobs: ScoredJob[]) => void
     }
   ) {}
 
@@ -134,6 +136,17 @@ export class Scheduler {
           } catch (err) {
             log.warn('scheduler', `Telegram notification failed: ${(err as Error).message}`)
           }
+        }
+      }
+      const freshSet = new Set(fresh)
+      const newMatches = visible.filter(
+        (j) => freshSet.has(j.id) && (j.match ? j.match.score >= s.minScoreToNotify : true)
+      )
+      if (newMatches.length && store.settings.get().notifications?.desktop !== false) {
+        try {
+          this.deps.notifyNewJobs?.(s.name, newMatches)
+        } catch (err) {
+          log.warn('scheduler', `Desktop notification failed: ${(err as Error).message}`)
         }
       }
       store.searches.recordSuccess(s.id, visible.length, fresh.length)

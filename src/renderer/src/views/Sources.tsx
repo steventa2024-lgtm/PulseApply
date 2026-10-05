@@ -165,6 +165,30 @@ function ProviderCard({
       <dl className="mt-2 space-y-0.5 text-[11px] text-slate-500">
         <div>Markets: {p.markets}</div>
         <div>Limits: {p.rateLimitNote}</div>
+        {p.usage && (
+          <div data-testid={`usage-${p.id}`}>
+            <div className="flex justify-between">
+              <span>
+                Used this month: {p.usage.used} of {p.usage.limit} requests
+              </span>
+              <span>{Math.max(0, p.usage.limit - p.usage.used)} left</span>
+            </div>
+            <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded bg-white/10">
+              <div
+                className={
+                  p.usage.used >= p.usage.limit
+                    ? 'h-full bg-rose-400'
+                    : p.usage.used >= p.usage.limit * 0.8
+                      ? 'h-full bg-amber-400'
+                      : 'h-full bg-cyan-400'
+                }
+                style={{
+                  width: `${Math.min(100, (p.usage.used / Math.max(1, p.usage.limit)) * 100)}%`
+                }}
+              />
+            </div>
+          </div>
+        )}
         {p.lastSuccessAt && (
           <div>
             Last successful fetch: {timeAgo(p.lastSuccessAt)} ({p.lastCount ?? 0} jobs)

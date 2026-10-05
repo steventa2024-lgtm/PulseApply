@@ -72,6 +72,24 @@ export class ProvidersRepo {
     ])
   }
 
+  /** Counts one request against the provider's monthly usage (UTC month). */
+  addUsage(providerId: string, month = new Date().toISOString().slice(0, 7)): void {
+    this.db.run(
+      `INSERT INTO provider_usage (provider_id, month, requests) VALUES (?, ?, 1)
+       ON CONFLICT(provider_id, month) DO UPDATE SET requests = requests + 1`,
+      [providerId, month]
+    )
+  }
+
+  usage(providerId: string, month = new Date().toISOString().slice(0, 7)): number {
+    return (
+      this.db.get<{ n: number }>(
+        'SELECT requests AS n FROM provider_usage WHERE provider_id = ? AND month = ?',
+        [providerId, month]
+      )?.n ?? 0
+    )
+  }
+
   recordSuccess(providerId: string, count: number): void {
     this.ensure(providerId)
     const now = new Date().toISOString()

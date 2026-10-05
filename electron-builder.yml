@@ -22,8 +22,8 @@ win:
   executableName: pulseapply
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
+  shortcutName: PulseApply
+  uninstallDisplayName: PulseApply
   createDesktopShortcut: always
 mac:
   entitlementsInherit: build/entitlements.mac.plist

@@ -42,6 +42,19 @@ npx playwright install chromium      # browser used for application autofill (op
 npm run dev                          # start in development mode
 ```
 
+### Install it as a normal Windows app (no PowerShell needed afterwards)
+
+```powershell
+cd C:\Users\<you>\pulseapply-v2
+npm run build:win
+```
+
+This creates `dist\pulseapply-<version>-setup.exe`. Run it once; it installs PulseApply and adds a
+**PulseApply** shortcut to your desktop and Start menu. Because the installer is not code-signed,
+Windows SmartScreen may say “Windows protected your PC” — click **More info → Run anyway**. Your
+data folder is shared with `npm run dev`, so nothing is lost. After `git pull`, run
+`npm run build:win` again and re-run the new installer to update.
+
 Production build:
 
 ```bash
@@ -55,7 +68,7 @@ Quality checks:
 ```bash
 npm run lint
 npm run typecheck
-npm test               # 115 tests; the UI test needs `npm run build` first, browser/PDF tests need Chromium
+npm test               # 124 tests; the UI test needs `npm run build` first, browser/PDF tests need Chromium
 ```
 
 > **Application browser.** Autofill opens a *visible* browser. PulseApply tries, in order: a custom
@@ -72,6 +85,10 @@ npm test               # 115 tests; the UI test needs `npm run build` first, bro
 | **Match criteria** | One saved set of criteria (occupation, location + radius, work mode, employment type, pay, minimum match score, required/preferred skills) drives Search, Results, the dashboard, scheduled searches and Telegram. Editing it re-checks every stored job immediately. |
 | **Hard filters first** | Occupation, location, work mode, employment type, pay and age are checked **before** any score is calculated. Jobs that fail are listed under *Excluded* with the reason; they get no score. |
 | **Location** (strict by default) | *Strict*: only jobs inside the radius (or remote jobs open to your country, if Remote is selected). *Preferred only* (opt-in): jobs anywhere are shown, nearby ones rank higher, far ones are labelled “Outside your preferred area”. Jobs whose location cannot be verified go to a separate *Location could not be verified* group. |
+| **Tracker** | For jobs you apply to yourself: **I applied** on any job moves it to the Tracker (Saved → Interested → Applied → Interviewing → Offer → Closed) with the date, a follow-up reminder one week later, a contact and notes. Due follow-ups appear on the Dashboard. Applications submitted through autofill are added automatically. |
+| **Where to apply** | Job details list every place the job is posted (employer site first, then LinkedIn, Indeed, ZipRecruiter…), merged across sources. |
+| **API allowance** | JSearch and SerpApi have monthly free allowances. Sources shows *Used this month: X of Y*; PulseApply stops using a source when its limit is reached (set your plan's limit on its card) and re-queries Google Jobs at most every 6 hours per search. |
+| **Notifications** | Scheduled searches show a desktop notification for newly found matching jobs (turn off in Settings → Location & freshness); clicking it opens Results. |
 | **Resume Helper** | Improve an uploaded resume or build one from guided questions; live paginated preview beside the editor; three ATS-friendly templates; Letter/A4; **Download PDF** (real, selectable text, verified after writing); **Set as master** updates your profile, the resume attached to applications and all match scores. |
 | **Search** | Natural-language queries (“part-time barista within 15 miles”, “remote junior frontend developer”) are parsed into occupation, location, radius, work mode, pay, schedule and seniority. |
 | **Sources** | Providers run in parallel with bounded concurrency, timeouts, retries with backoff, `Retry-After` handling, per-provider caching and cancellation. One failing source never stops the others. |

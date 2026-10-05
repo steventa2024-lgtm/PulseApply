@@ -1,4 +1,5 @@
 import type { NormalizedJob } from '../../../../shared/types'
+import { mergeApplyOptions } from '../normalization/applyOptions'
 import { normalizeTitle } from '../search/classify'
 import { canonicalizeUrl } from '../verification/urlSafety'
 import { haversineKm } from '../geo/geoService'
@@ -123,6 +124,7 @@ function mergeInto(target: NormalizedJob, other: NormalizedJob): NormalizedJob {
       ...new Set([...primary.verificationNotes, ...secondary.verificationNotes])
     ].slice(0, 8),
     scamSignals: [...new Set([...primary.scamSignals, ...secondary.scamSignals])],
+    applyOptions: mergeApplyOptions(primary.applyOptions, secondary.applyOptions),
     sources
   }
 }

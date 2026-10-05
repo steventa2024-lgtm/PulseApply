@@ -71,9 +71,34 @@ export class SearchService {
   ) {
     for (const p of deps.providers)
       for (const h of p.hosts) deps.http.setHostInterval(h, p.rateLimit.minIntervalMs)
+    // Count real requests to APIs with a monthly allowance.
+    const quotaHosts = new Map<string, string>()
+    for (const p of deps.providers)
+      if (p.monthlyQuota) for (const h of p.hosts) quotaHosts.set(h, p.id)
+    deps.http.onRequest((url) => {
+      try {
+        const id = quotaHosts.get(new URL(url).hostname)
+        if (id) deps.store.providers.addUsage(id)
+      } catch {
+        // ignore
+      }
+    })
   }
 
   private secret = (key: string): string | undefined => this.deps.store.secrets.get(key)
+
+  quotaReached(p: JobProvider): boolean {
+    const u = this.usage(p)
+    return !!u && u.used >= u.limit
+  }
+
+  /** Monthly usage of a quota-limited provider. */
+  usage(p: JobProvider): { used: number; limit: number; month: string } | undefined {
+    if (!p.monthlyQuota) return undefined
+    const month = new Date().toISOString().slice(0, 7)
+    const limit = Number(this.secret(p.monthlyQuota.limitKey)) || p.monthlyQuota.defaultLimit
+    return { used: this.deps.store.providers.usage(p.id, month), limit, month }
+  }
 
   providerInfos(): ProviderInfo[] {
     const { store } = this.deps
@@ -106,6 +131,9 @@ export class SearchService {
       } else if (missing.length) {
         status = 'REQUIRES_CREDENTIALS'
         detail = `Needs: ${missing.join(', ')}`
+      } else if (this.quotaReached(p)) {
+        status = 'LIMITED'
+        detail = `Monthly limit reached (${this.usage(p)!.used}/${this.usage(p)!.limit}); resets on the 1st. Raise the limit below if your plan allows more.`
       } else if (health.rateLimitedUntil && health.rateLimitedUntil > new Date().toISOString()) {
         status = 'LIMITED'
         detail = `Rate-limited until ${new Date(health.rateLimitedUntil).toLocaleTimeString()}`
@@ -150,7 +178,8 @@ export class SearchService {
         lastError: health.lastError,
         lastCount: health.lastCount,
         rateLimitedUntil: health.rateLimitedUntil,
-        manualSearchUrlTemplate: p.manualSearchUrlTemplate
+        manualSearchUrlTemplate: p.manualSearchUrlTemplate,
+        usage: this.usage(p)
       }
     })
   }
@@ -365,6 +394,11 @@ export class SearchService {
         const sup = p.supports(query)
         if (!sup.ok) {
           report('skipped', sup.reason ?? 'Not applicable to this search')
+          continue
+        }
+        if (this.quotaReached(p)) {
+          const u = this.usage(p)!
+          report('skipped', `Monthly limit reached (${u.used}/${u.limit})`)
           continue
         }
         const limited = store.providers.health(p.id).rateLimitedUntil

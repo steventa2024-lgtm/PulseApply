@@ -11,6 +11,7 @@ export type View =
   | 'dashboard'
   | 'search'
   | 'results'
+  | 'tracker'
   | 'applications'
   | 'automation'
   | 'sources'

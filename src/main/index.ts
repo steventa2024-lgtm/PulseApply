@@ -1,4 +1,13 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, safeStorage, session } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  safeStorage,
+  session,
+  Notification
+} from 'electron'
 import fs from 'fs'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -204,7 +213,28 @@ async function bootstrap(): Promise<void> {
     cipher: new SafeStorageCipher(),
     emit: send,
     appVersion: app.getVersion(),
-    pdfPrinter: () => pdfPrinter
+    pdfPrinter: () => pdfPrinter,
+    notifyNewJobs: (searchName, jobs) => {
+      if (!Notification.isSupported()) return
+      const top = jobs
+        .slice(0, 3)
+        .map((j) => `${j.title} — ${j.company}`)
+        .join('\n')
+      const n = new Notification({
+        title: `${jobs.length} new job${jobs.length === 1 ? '' : 's'}: ${searchName}`,
+        body: top + (jobs.length > 3 ? `\n+${jobs.length - 3} more` : ''),
+        silent: false
+      })
+      n.on('click', () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore()
+          mainWindow.show()
+          mainWindow.focus()
+        }
+        send('app:navigate', 'results')
+      })
+      n.show()
+    }
   })
   registerIpc(services)
   createWindow()

@@ -42,6 +42,8 @@ export interface ServiceOptions {
   allowPrivateHosts?: boolean
   /** HTML-to-PDF renderer for the Resume Helper (Electron printToPDF in the app). */
   pdfPrinter?: () => PdfPrinter | undefined
+  /** Desktop notification hook (Electron main process). */
+  notifyNewJobs?: (searchName: string, jobs: import('../../shared/types').ScoredJob[]) => void
   /** In-memory database (tests). */
   inMemory?: boolean
 }
@@ -154,7 +156,8 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
     store,
     search,
     telegram,
-    onUpdate: () => opts.emit('scheduler:updated', null)
+    onUpdate: () => opts.emit('scheduler:updated', null),
+    notifyNewJobs: opts.notifyNewJobs
   })
 
   let shuttingDown: Promise<void> | null = null
@@ -187,8 +190,18 @@ export async function createServices(opts: ServiceOptions): Promise<Services> {
       const counters = await criteria.counters()
       const counts = store.applications.counts()
       const infos = search.providerInfos()
+      const today = new Date().toISOString().slice(0, 10)
+      const followUpsDue = store.tracking
+        .dueFollowUps(today)
+        .map((f) => {
+          const j = store.jobs.get(f.jobId)
+          return j ? { ...f, title: j.title, company: j.company } : undefined
+        })
+        .filter((x): x is NonNullable<typeof x> => !!x)
       return {
         counters,
+        tracking: store.tracking.counts(),
+        followUpsDue,
         totalJobs: s.total,
         newJobs: s.newJobs,
         verifiedJobs: s.verified,

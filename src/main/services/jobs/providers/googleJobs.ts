@@ -160,6 +160,13 @@ export const jsearchProvider: JobProvider = {
       help: 'Each page returns up to 10 jobs and costs one request from your quota.'
     },
     {
+      key: 'jsearch.monthlyLimit',
+      label: 'Monthly request limit (default 200)',
+      secret: false,
+      required: false,
+      help: 'Your RapidAPI plan’s monthly allowance. PulseApply stops using JSearch when it is reached.'
+    },
+    {
       key: 'jsearch.endpoint',
       label: 'Endpoint URL (optional)',
       secret: false,
@@ -172,6 +179,7 @@ export const jsearchProvider: JobProvider = {
   cacheTtlMs: 6 * 60 * 60_000,
   timeoutMs: 30_000,
   hosts: ['jsearch.p.rapidapi.com'],
+  monthlyQuota: { limitKey: 'jsearch.monthlyLimit', defaultLimit: 200 },
   supports(q) {
     if (!q.keywords) return { ok: false, reason: 'Needs a job title or keyword' }
     return { ok: true }
@@ -302,6 +310,11 @@ export const jsearchProvider: JobProvider = {
       expiresAt: isoFromString(j.job_offer_expiration_datetime_utc),
       employerDirect: false,
       countryHint: str(j.job_country),
+      applyOptions: options.map((o) => ({
+        label: str(o.publisher) ?? hostLabel(o.apply_link) ?? 'Apply',
+        url: o.apply_link,
+        direct: !!o.is_direct && !KNOWN_BOARDS.test(hostLabel(o.apply_link) ?? '')
+      })),
       extraNotes: listedOn.length ? [`Listed on: ${listedOn.join(', ')}.`] : []
     }
     return draft
@@ -365,6 +378,13 @@ export const serpApiJobsProvider: JobProvider = {
       label: 'Pages per search (1–5, default 2)',
       secret: false,
       required: false
+    },
+    {
+      key: 'serpapi.monthlyLimit',
+      label: 'Monthly search limit (default 100)',
+      secret: false,
+      required: false,
+      help: 'Your SerpApi plan’s monthly searches (see your SerpApi dashboard). PulseApply stops using SerpApi when it is reached.'
     }
   ],
   defaultEnabled: true,
@@ -372,6 +392,7 @@ export const serpApiJobsProvider: JobProvider = {
   cacheTtlMs: 6 * 60 * 60_000,
   timeoutMs: 30_000,
   hosts: ['serpapi.com'],
+  monthlyQuota: { limitKey: 'serpapi.monthlyLimit', defaultLimit: 100 },
   supports(q) {
     if (!q.keywords) return { ok: false, reason: 'Needs a job title or keyword' }
     return { ok: true }
@@ -463,6 +484,11 @@ export const serpApiJobsProvider: JobProvider = {
       salaryText: str(ext.salary),
       postedAt: relativeToIso(ext.posted_at, Number(r.context?.fetchedAt) || Date.now()),
       employerDirect: false,
+      applyOptions: options.map((o) => ({
+        label: str(o.title) ?? hostLabel(o.link) ?? 'Apply',
+        url: o.link,
+        direct: !KNOWN_BOARDS.test(hostLabel(o.link) ?? '')
+      })),
       extraNotes: [
         listedOn.length ? `Listed on: ${listedOn.join(', ')}.` : str(j.via) ? `${j.via}.` : ''
       ].filter(Boolean)
